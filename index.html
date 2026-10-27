@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101b2d"><meta name="description" content="Gestão da lavagem automotiva Auto Brilho">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css"><title>Auto Brilho | Gestão</title>
+</head>
+<body>
+<header class="topbar"><div class="brandmark">AB</div><div><strong>Auto Brilho</strong><small>Gestão automotiva</small></div><button id="logoutBtn" class="install">Sair</button><button id="installBtn" class="install hidden">Instalar</button></header>
+<section id="loginScreen" class="login-screen">
+  <form id="loginForm" class="login-card">
+    <div class="brandmark login-mark">AB</div><p class="eyebrow">ACESSO RESTRITO</p><h1>Entrar no Auto Brilho</h1>
+    <p class="muted">Acesso exclusivo do administrador.</p>
+    <label for="loginEmail">E-mail</label><input id="loginEmail" type="email" autocomplete="username" required placeholder="seu@email.com">
+    <label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Sua senha">
+    <button class="primary wide" type="submit">Entrar</button><p id="loginMessage" class="muted small" role="status"></p>
+  </form>
+</section>
+<div id="appShell" class="hidden">
+<main>
+<section class="welcome"><div><p class="eyebrow">PAINEL DE CONTROLE</p><h1>Olá! Vamos organizar o dia?</h1><p class="muted">Cadastros, serviços e financeiro em um só lugar.</p></div></section>
+<section class="stats" id="stats"></section>
+<nav class="tabs" id="tabs" aria-label="Seções"></nav>
+<section class="panel"><div class="panel-head"><div><p class="eyebrow" id="sectionEyebrow">GESTÃO</p><h2 id="sectionTitle">Clientes</h2></div><button id="addBtn" class="primary">+ Novo cadastro</button></div>
+<div id="formWrap" class="form-wrap hidden"></div>
+<div class="tools"><input id="searchInput" type="search" placeholder="Buscar neste cadastro…" aria-label="Buscar"><button id="refreshBtn" class="secondary">Atualizar</button></div>
+<div id="tableWrap" class="table-wrap"></div>
+</section>
+<section class="panel reports"><div class="panel-head"><div><p class="eyebrow">DADOS DO NEGÓCIO</p><h2>Relatórios Excel</h2><p class="muted">Gere uma pasta de trabalho com seis abas.</p></div><span class="excel-mark">XLSX</span></div><button id="exportBtn" class="primary wide">Exportar os 6 relatórios para Excel</button><button id="backupBtn" class="secondary wide backup-btn">Baixar backup completo (JSON)</button><p id="exportStatus" class="muted small"></p><p class="small muted">Para criar o arquivo Excel, é necessária uma conexão com a internet no momento da exportação.</p></section>
+<section class="notice"><span class="notice-icon">ⓘ</span><p><strong>Importante sobre seus dados</strong><br>Os registros são armazenados na nuvem e sincronizados quando você estiver conectado. Baixe backups regularmente e guarde-os em local seguro. A exportação Excel gera seis abas de relatórios.</p></section>
+<footer>Auto Brilho · Web com banco de dados na nuvem</footer>
+</main>
+</div>
+<div id="toast" class="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));</script>
+</body></html>
