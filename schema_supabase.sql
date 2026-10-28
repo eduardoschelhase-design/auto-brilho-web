@@ -25,7 +25,7 @@ do $$ declare t text; begin
   foreach t in array array['clients','vehicles','services','appointments','payments','expenses'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "admin authenticated access" on public.%I', t);
-    execute format('create policy "admin authenticated access" on public.%I for all to authenticated using (lower((auth.jwt() ->> ''email'')) = lower(''ADMIN_EMAIL_AQUI'')) with check (lower((auth.jwt() ->> ''email'')) = lower(''ADMIN_EMAIL_AQUI''))', t);
+    execute format('create policy "admin authenticated access" on public.%I for all to authenticated using (lower((auth.jwt() ->> ''email'')) = lower(''eduardoschelhase@gmail.com'')) with check (lower((auth.jwt() ->> ''email'')) = lower(''eduardoschelhase@gmail.com''))', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
     execute format('drop trigger if exists set_updated_at on public.%I', t);
     execute format('create trigger set_updated_at before update on public.%I for each row execute function public.set_updated_at()', t);
