@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101b2d"><meta name="description" content="Gestão da lavagem automotiva Auto Brilho">
-<link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="style.css"><title>Auto Brilho | Gestão</title>
 </head>
 <body>
@@ -15,6 +15,16 @@
     <label for="loginEmail">E-mail</label><input id="loginEmail" type="email" autocomplete="username" required placeholder="seu@email.com">
     <label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Sua senha">
     <button class="primary wide" type="submit">Entrar</button><p id="loginMessage" class="muted small" role="status"></p>
+  </form>
+</section>
+<section id="recoveryScreen" class="login-screen hidden">
+  <form id="recoveryForm" class="login-card">
+    <div class="brandmark login-mark">AB</div><p class="eyebrow">RECUPERAÇÃO DE ACESSO</p><h1>Definir nova senha</h1>
+    <p class="muted">Digite sua nova senha para acessar o Auto Brilho.</p>
+    <label for="newPassword">Nova senha</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Pelo menos 8 caracteres">
+    <label for="confirmPassword">Confirmar nova senha</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Digite a senha novamente">
+    <button class="primary wide" type="submit">Salvar nova senha</button><p id="recoveryMessage" class="muted small" role="status" aria-live="polite"></p>
+    <button id="backToLoginBtn" class="secondary wide" type="button">Voltar ao login</button>
   </form>
 </section>
 <div id="appShell" class="hidden">
