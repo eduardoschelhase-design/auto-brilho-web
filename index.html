@@ -52,8 +52,32 @@ window.addEventListener('error', function(e) {
   if (el) el.textContent = 'ERRO JAVASCRIPT: ' + e.message;
 });
 </script>
+<script>
+(function() {
+  const msg = document.getElementById('loginMessage');
 
-<script src="app.js?v=5"></script>
+  msg.textContent = 'TESTE: index.html carregado.';
+
+  window.addEventListener('error', function(e) {
+    msg.textContent = 'ERRO: ' + (e.message || 'Falha ao executar JavaScript');
+  });
+
+  const script = document.createElement('script');
+  script.src = './app.js?v=6';
+
+  script.onload = function() {
+    if (msg.textContent === 'TESTE: index.html carregado.') {
+      msg.textContent = 'app.js carregado, mas o diagnóstico não foi executado.';
+    }
+  };
+
+  script.onerror = function() {
+    msg.textContent = 'ERRO: não foi possível carregar o arquivo app.js.';
+  };
+
+  document.body.appendChild(script);
+})();
+</script>
 <!-- Service workers antigos são desativados para evitar carregar arquivos em cache. -->
 <script>
 if ('serviceWorker' in navigator) {
