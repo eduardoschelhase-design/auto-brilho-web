@@ -548,3 +548,226 @@ showToast('Backup gerado com sucesso.');
   showToast('Erro ao gerar backup: '+e.message);
  }
 }
+function subscribeRealtime(){
+ if(realtimeChannel)sbClient.removeChannel(realtimeChannel);
+
+ realtimeChannel=sbClient.channel('auto-brilho-sync')
+  .on('postgres_changes',{
+   event:'*',
+   schema:'public'
+  },()=>{
+   renderTable();
+   renderStats();
+  })
+  .subscribe();
+}
+
+async function enterApp(){
+ showApp(true);
+ renderTabs();
+ renderSection();
+ await renderStats();
+ subscribeRealtime();
+}
+
+function recoveryLinkPresent(){
+ const hash=new URLSearchParams(location.hash.replace(/^#/, ''));
+ const query=new URLSearchParams(location.search);
+
+ return hash.get('type')==='recovery' ||
+        query.get('type')==='recovery';
+}
+
+function showRecovery(message=''){
+ recoveryMode=true;
+ $('loginScreen').classList.add('hidden');
+ $('appShell').classList.add('hidden');
+ $('recoveryScreen').classList.remove('hidden');
+ $('logoutBtn').classList.add('hidden');
+
+ if(message)$('recoveryMessage').textContent=message;
+}
+
+function clearRecoveryUrl(){
+ history.replaceState(null,document.title,location.pathname+location.search);
+}
+
+async function init(){
+ setLoginMessage('Inicializando Auto Brilho...');
+ recoveryMode=recoveryLinkPresent();
+
+ if(!window.supabase||!configured()){
+  showApp(false);
+  setLoginMessage('Verifique a configuração do Supabase no arquivo config.js.');
+  return;
+ }
+
+ sbClient=window.supabase.createClient(
+  window.AUTO_BRILHO_CONFIG.supabaseUrl,
+  window.AUTO_BRILHO_CONFIG.supabaseAnonKey
+ );
+
+ const {data:{session},error:sessionError}=await sbClient.auth.getSession();
+
+ if(sessionError)console.error('Erro ao recuperar sessão:',sessionError);
+
+ if(recoveryMode){
+  showRecovery('Defina sua nova senha abaixo.');
+ }else if(session){
+  await enterApp();
+ }else{
+  showApp(false);
+ }
+
+ sbClient.auth.onAuthStateChange((event,session)=>{
+  if(event==='PASSWORD_RECOVERY'){
+   showRecovery('Defina sua nova senha abaixo.');
+   return;
+  }
+
+  if(recoveryMode)return;
+
+  setTimeout(async()=>{
+   try{
+    if(session){
+     if($('appShell').classList.contains('hidden')){
+      await enterApp();
+     }
+    }else{
+     if(realtimeChannel){
+      await sbClient.removeChannel(realtimeChannel);
+      realtimeChannel=null;
+     }
+     showApp(false);
+    }
+   }catch(err){
+    console.error('Erro ao abrir painel:',err);
+    showApp(false);
+    setLoginMessage('Erro ao carregar painel: '+err.message);
+   }
+  },0);
+ });
+
+ $('loginForm').onsubmit=async e=>{
+  e.preventDefault();
+
+  const btn=e.target.querySelector('button[type=submit]');
+  btn.disabled=true;
+  setLoginMessage('Verificando acesso...');
+
+  try{
+   const {error}=await sbClient.auth.signInWithPassword({
+    email:$('loginEmail').value.trim(),
+    password:$('loginPassword').value
+   });
+
+   if(error){
+    console.error('Erro de login:',error);
+    setLoginMessage('Falha no login: '+error.message);
+   }else{
+    setLoginMessage('Acesso autorizado.');
+   }
+  }catch(err){
+   console.error(err);
+   setLoginMessage('Falha de conexão: '+err.message);
+  }finally{
+   btn.disabled=false;
+  }
+ };
+
+ $('recoveryForm').onsubmit=async e=>{
+  e.preventDefault();
+
+  const btn=e.target.querySelector('button[type=submit]');
+  const password=$('newPassword').value;
+  const confirm=$('confirmPassword').value;
+
+  if(password.length<8){
+   $('recoveryMessage').textContent='Use uma senha com pelo menos 8 caracteres.';
+   return;
+  }
+
+  if(password!==confirm){
+   $('recoveryMessage').textContent='As senhas não coincidem.';
+   return;
+  }
+
+  btn.disabled=true;
+  $('recoveryMessage').textContent='Salvando nova senha...';
+
+  try{
+   const {error}=await sbClient.auth.updateUser({password});
+
+   if(error){
+    $('recoveryMessage').textContent='Não foi possível atualizar a senha. Solicite um novo link.';
+    return;
+   }
+
+   await sbClient.auth.signOut();
+   recoveryMode=false;
+   clearRecoveryUrl();
+
+   $('recoveryScreen').classList.add('hidden');
+   showApp(false);
+   $('loginPassword').value='';
+   setLoginMessage('Senha alterada. Entre usando a nova senha.');
+   $('loginEmail').focus();
+
+  }catch(err){
+   console.error(err);
+   $('recoveryMessage').textContent='Falha de conexão. Tente novamente.';
+  }finally{
+   btn.disabled=false;
+  }
+ };
+
+ $('backToLoginBtn').onclick=async()=>{
+  recoveryMode=false;
+
+  try{
+   await sbClient.auth.signOut();
+  }catch(e){}
+
+  clearRecoveryUrl();
+  $('recoveryScreen').classList.add('hidden');
+  showApp(false);
+  $('recoveryMessage').textContent='';
+  setLoginMessage('Você voltou à tela de acesso.');
+ };
+}
+
+$('addBtn').onclick=()=>renderForm();
+
+$('refreshBtn').onclick=()=>{
+ renderTable();
+ renderStats();
+ showToast('Dados atualizados da nuvem.');
+};
+
+$('searchInput').addEventListener('input',renderTable);
+
+$('exportBtn').onclick=exportExcel;
+$('backupBtn').onclick=backupJSON;
+
+window.addEventListener('beforeinstallprompt',e=>{
+ e.preventDefault();
+ installPrompt=e;
+ $('installBtn').classList.remove('hidden');
+});
+
+$('installBtn').onclick=async()=>{
+ if(installPrompt){
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt=null;
+  $('installBtn').classList.add('hidden');
+ }else{
+  showToast('No Chrome, abra o menu ⋮ e escolha Instalar app ou Adicionar à tela inicial.');
+ }
+};
+
+init().catch(e=>{
+ console.error(e);
+ showApp(false);
+ setLoginMessage('Falha ao iniciar: '+(e.message||'verifique as configurações e recarregue a página.'));
+});
