@@ -14,7 +14,7 @@ const modules={
 
 let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
 let dashboardPeriod='current';
-
+let dashboardChartRange=12;
 const $=id=>document.getElementById(id);
 
 const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO_BRILHO_CONFIG.supabaseUrl) && !window.AUTO_BRILHO_CONFIG.supabaseUrl.includes('COLE_AQUI') && window.AUTO_BRILHO_CONFIG.supabaseAnonKey && !window.AUTO_BRILHO_CONFIG.supabaseAnonKey.includes('COLE_AQUI');
