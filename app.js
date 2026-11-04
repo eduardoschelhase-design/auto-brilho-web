@@ -835,7 +835,7 @@ async function renderDashboards(){
    renderDashboards();
   };
 
- }catch(err){
+  }catch(err){
   console.error('Erro ao carregar dashboards:',err);
 
   target.innerHTML=`
@@ -843,9 +843,12 @@ async function renderDashboards(){
     Não foi possível carregar os dashboards.
     Verifique sua conexão e tente atualizar.
    </div>
-  `;
+  }
  }
-     
+}
+
+// Atualização dos indicadores do painel
+
 async function renderStats(){
  try{
   const [clients,vehicles,services,appointments,payments,expenses]=
