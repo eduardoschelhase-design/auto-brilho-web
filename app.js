@@ -49,21 +49,57 @@ async function remove(store,id){
 }
 
 function renderTabs(){
- $('tabs').innerHTML=Object.entries(modules).filter(([k])=>k!=='vehicles').map(([k,m])=>`<button class="tab ${k===active?'active':''}" data-tab="${k}">${m.icon} ${m.label}</button>`).join('');
- $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
-  active=b.dataset.tab;
-  editId=null;
-  $('formWrap').classList.add('hidden');
-  renderTabs();
-  renderSection();
+ const tabs=[
+  ['dashboard','▥','Dashboards'],
+  ...Object.entries(modules)
+   .filter(([k])=>k!=='vehicles')
+   .map(([k,m])=>[k,m.icon,m.label])
+ ];
+
+ $('tabs').innerHTML=tabs.map(([key,icon,label])=>
+  `<button class="tab ${key===active?'active':''}" data-tab="${key}">
+   ${icon} ${label}
+  </button>`
+ ).join('');
+
+ $('tabs').querySelectorAll('[data-tab]').forEach(b=>{
+  b.onclick=()=>{
+   active=b.dataset.tab;
+   editId=null;
+   editingVehicleId=null;
+
+   $('formWrap').classList.add('hidden');
+
+   renderTabs();
+   renderSection();
+  };
  });
 }
 
 function renderSection(){
- const m=modules[active];
- $('sectionTitle').textContent=active==='clients'?'Clientes e veículos':m.label;
- $('sectionEyebrow').textContent='CADASTROS E CONTROLE';
- $('addBtn').textContent=active==='clients'?'+ Novo cadastro':'+ Novo '+m.singular;
+ const isDashboard=active==='dashboard';
+
+ $('sectionEyebrow').textContent=
+  isDashboard?'ANÁLISE DO NEGÓCIO':'CADASTROS E CONTROLE';
+
+ $('sectionTitle').textContent=
+  isDashboard?'Dashboards':
+  active==='clients'?'Clientes e veículos':
+  modules[active].label;
+
+ $('addBtn').classList.toggle('hidden',isDashboard);
+ $('formWrap').classList.add('hidden');
+ $('searchInput').parentElement.classList.toggle('hidden',isDashboard);
+
+ if(isDashboard){
+  renderDashboards();
+  return;
+ }
+
+ $('addBtn').textContent=
+  active==='clients'?'+ Novo cadastro':
+  '+ Novo '+modules[active].singular;
+
  $('searchInput').value='';
  renderTable();
 }
