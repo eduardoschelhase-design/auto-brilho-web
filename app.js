@@ -453,22 +453,32 @@ async function renderTable(){
 
 async function renderStats(){
  try{
-  const [clients,vehicles,services,payments,expenses,appointments]=await Promise.all(
-   Object.values(modules).map(m=>all(m.store))
-  );
+  const [clients,vehicles,services,appointments,payments,expenses]=
+   await Promise.all(
+    Object.values(modules).map(m=>all(m.store))
+   );
 
-  const paid=payments.filter(p=>p.status==='Pago').reduce((s,p)=>s+Number(p.value||0),0);
-  const spent=expenses.reduce((s,p)=>s+Number(p.value||0),0);
+  const paid=payments
+   .filter(p=>p.status==='Pago')
+   .reduce((s,p)=>s+Number(p.value||0),0);
+
+  const spent=expenses
+   .reduce((s,p)=>s+Number(p.value||0),0);
 
   const stats=[
    ['Clientes',clients.length],
    ['Veículos',vehicles.length],
-   ['Agendamentos',appointments.filter(a=>['Agendado','Confirmado'].includes(a.status)).length],
+   ['Agendamentos',appointments.filter(a=>
+    ['Agendado','Confirmado'].includes(a.status)
+   ).length],
    ['Saldo registrado',money(paid-spent)]
   ];
 
   $('stats').innerHTML=stats.map(([l,v])=>
-   `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`
+   `<div class="stat">
+    <div class="label">${l}</div>
+    <div class="value">${v}</div>
+   </div>`
   ).join('');
 
  }catch(e){
