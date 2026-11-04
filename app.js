@@ -15,6 +15,7 @@ const modules={
 let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
 let dashboardPeriod='current';
 let dashboardChartRange=12;
+let returnToServicesAfterVehicleRegistration=false;
 const $=id=>document.getElementById(id);
 
 const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO_BRILHO_CONFIG.supabaseUrl) && !window.AUTO_BRILHO_CONFIG.supabaseUrl.includes('COLE_AQUI') && window.AUTO_BRILHO_CONFIG.supabaseAnonKey && !window.AUTO_BRILHO_CONFIG.supabaseAnonKey.includes('COLE_AQUI');
@@ -110,6 +111,11 @@ function renderForm(item={}){
   return;
  }
 
+ if(active==='services'){
+  renderServiceForm(item);
+  return;
+ }
+
  const m=modules[active];
  editId=item.id??null;
 
@@ -153,6 +159,207 @@ function renderForm(item={}){
  };
 }
 
+// Lançamento de serviço iniciado pela placa do veículo.
+function renderServiceForm(item={}){
+ editId=item.id??null;
+
+ const initialPlate=normalizePlate(item.vehicle||'');
+ const initialDate=item.date||new Date().toISOString().slice(0,10);
+
+ $('formWrap').innerHTML=`
+  <form id="recordForm">
+   <div class="field">
+    <label for="servicePlate">Placa do veículo *</label>
+    <input id="servicePlate" name="plate" type="text" required
+     maxlength="8" autocomplete="off" autocapitalize="characters"
+     style="text-transform:uppercase" value="${esc(initialPlate)}"
+     placeholder="Digite a placa">
+   </div>
+
+   <div class="form-actions">
+    <button type="button" class="primary" id="findServiceVehicle">Buscar veículo</button>
+   </div>
+
+   <div id="serviceVehicleMessage" class="muted small">
+    Informe a placa e toque em “Buscar veículo”.
+   </div>
+
+   <div id="serviceDetails" class="${item.id?'':'hidden'}">
+    <div class="form-grid">
+     <div class="field">
+      <label>Proprietário</label>
+      <input name="client" id="serviceClient" readonly required>
+     </div>
+     <div class="field">
+      <label>Veículo / placa</label>
+      <input name="vehicle" id="serviceVehicle" readonly required>
+     </div>
+     <div class="field">
+      <label>Data *</label>
+      <input name="date" type="date" required value="${esc(initialDate)}">
+     </div>
+     <div class="field">
+      <label>Serviço executado *</label>
+      <input name="service" type="text" required value="${esc(item.service||'')}">
+     </div>
+     <div class="field">
+      <label>Valor (R$) *</label>
+      <input name="value" type="number" min="0" step="0.01" required
+       value="${esc(item.value??'')}" placeholder="0,00">
+     </div>
+     <div class="field">
+      <label>Situação *</label>
+      <select name="status" required>
+       <option value="">Selecione...</option>
+       ${['Concluído','Em andamento','Cancelado'].map(o=>
+        `<option ${item.status===o?'selected':''}>${o}</option>`
+       ).join('')}
+      </select>
+     </div>
+     <div class="field" style="grid-column:1/-1">
+      <label>Observações</label>
+      <textarea name="notes" rows="2">${esc(item.notes||'')}</textarea>
+     </div>
+    </div>
+    <div id="serviceVehicleInfo" class="muted small"></div>
+    <div class="form-actions">
+     <button type="button" class="secondary" id="cancelForm">Cancelar</button>
+     <button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar serviço'}</button>
+    </div>
+   </div>
+  </form>`;
+
+ $('formWrap').classList.remove('hidden');
+
+ const form=$('recordForm');
+ const plateInput=$('servicePlate');
+ const details=$('serviceDetails');
+ const message=$('serviceVehicleMessage');
+ let matchedVehicle=null;
+
+ plateInput.addEventListener('input',()=>{
+  const start=plateInput.selectionStart;
+  plateInput.value=normalizePlate(plateInput.value);
+  try{plateInput.setSelectionRange(start,start)}catch(e){}
+  matchedVehicle=null;
+  details.classList.add('hidden');
+  message.textContent='Toque em “Buscar veículo” para localizar o cadastro.';
+ });
+
+ async function findVehicle(){
+  const plate=normalizePlate(plateInput.value);
+  plateInput.value=plate;
+
+  if(!plate){
+   showToast('Informe a placa do veículo.');
+   plateInput.focus();
+   return;
+  }
+
+  const button=$('findServiceVehicle');
+  button.disabled=true;
+  message.textContent='Buscando veículo na nuvem...';
+
+  try{
+   const [vehicles,clients]=await Promise.all([
+    all('vehicles'),
+    all('clients')
+   ]);
+
+   matchedVehicle=vehicles.find(v=>normalizePlate(v.plate)===plate)||null;
+
+   if(!matchedVehicle){
+    matchedVehicle=null;
+    details.classList.add('hidden');
+    message.textContent='Veículo não cadastrado.';
+
+    if(confirm(`A placa ${plate} não está cadastrada. Deseja cadastrar o cliente e o veículo agora?`)){
+     returnToServicesAfterVehicleRegistration=true;
+     editId=null;
+     $('formWrap').classList.add('hidden');
+     active='clients';
+     renderTabs();
+     renderSection();
+     renderClientVehicleForm({plate});
+    }
+    return;
+   }
+
+   const client=
+    clients.find(c=>c.id===matchedVehicle.clientId)||
+    clients.find(c=>c.name===matchedVehicle.client)||
+    {name:matchedVehicle.client||''};
+
+   if(!client.name){
+    showToast('O veículo foi localizado, mas não há proprietário vinculado. Verifique o cadastro.');
+    details.classList.add('hidden');
+    return;
+   }
+
+   $('serviceClient').value=client.name;
+   $('serviceVehicle').value=plate;
+   $('serviceVehicleInfo').textContent=[
+    matchedVehicle.brand,
+    matchedVehicle.model,
+    matchedVehicle.type,
+    matchedVehicle.color
+   ].filter(Boolean).join(' • ');
+
+   details.classList.remove('hidden');
+   message.textContent=`Veículo localizado: ${plate}. Dados do cadastro preenchidos.`;
+  }catch(err){
+   matchedVehicle=null;
+   details.classList.add('hidden');
+   message.textContent='Não foi possível consultar a placa. Verifique a conexão.';
+   console.error('Erro ao buscar veículo pela placa:',err);
+  }finally{
+   button.disabled=false;
+  }
+ }
+
+ $('findServiceVehicle').onclick=findVehicle;
+
+ $('cancelForm').onclick=()=>{
+  $('formWrap').classList.add('hidden');
+  editId=null;
+ };
+
+ if(item.id){
+  findVehicle();
+ }
+
+ form.onsubmit=async e=>{
+  e.preventDefault();
+
+  if(!matchedVehicle){
+   showToast('Localize um veículo cadastrado antes de salvar o serviço.');
+   return;
+  }
+
+  const submit=form.querySelector('[type=submit]');
+  submit.disabled=true;
+
+  try{
+   const data=Object.fromEntries(new FormData(form).entries());
+   data.value=Number(data.value||0);
+   data.vehicle=normalizePlate(data.vehicle);
+   if(editId)data.id=editId;
+   else data.createdAt=new Date().toISOString();
+
+   await save('services',data);
+   $('formWrap').classList.add('hidden');
+   editId=null;
+   showToast('Serviço salvo na nuvem.');
+   await renderTable();
+   await renderStats();
+  }catch(err){
+   showToast('Não foi possível salvar o serviço: '+(err.message||'verifique a conexão.'));
+  }finally{
+   submit.disabled=false;
+  }
+ };
+}
+
 // Padroniza a placa para comparação e armazenamento.
 function normalizePlate(value){
  return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -187,6 +394,7 @@ function renderClientVehicleForm(vehicle={}){
    key==='clientNotes'?(currentClient.notes||''):
    key==='vehicleNotes'?(vehicle.notes||''):
    key==='name'?(currentClient.name||vehicle.client||''):
+   key==='plate'?(vehicle.plate||''):
    currentClient[key]??vehicle[key]??'';
 
   let input='';
@@ -230,6 +438,7 @@ function renderClientVehicleForm(vehicle={}){
   $('formWrap').classList.add('hidden');
   editId=null;
   editingVehicleId=null;
+  returnToServicesAfterVehicleRegistration=false;
  };
 
  $('recordForm').onsubmit=async e=>{
@@ -267,7 +476,17 @@ function renderClientVehicleForm(vehicle={}){
      editId=null;
      editingVehicleId=null;
      showToast('Cadastro existente mantido. O histórico da placa foi preservado.');
-     await renderTable();
+
+     if(returnToServicesAfterVehicleRegistration){
+      returnToServicesAfterVehicleRegistration=false;
+      active='services';
+      renderTabs();
+      renderSection();
+      renderServiceForm({vehicle:plate});
+     }else{
+      await renderTable();
+     }
+     await renderStats();
      return;
     }
 
@@ -343,7 +562,17 @@ function renderClientVehicleForm(vehicle={}){
    editingVehicleId=null;
 
    showToast('Cliente e veículo salvos na nuvem.');
-   await renderTable();
+
+   if(returnToServicesAfterVehicleRegistration){
+    returnToServicesAfterVehicleRegistration=false;
+    active='services';
+    renderTabs();
+    renderSection();
+    renderServiceForm({vehicle:plate});
+   }else{
+    await renderTable();
+   }
+
    await renderStats();
 
   }catch(err){
