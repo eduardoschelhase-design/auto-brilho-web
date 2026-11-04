@@ -453,8 +453,6 @@ async function renderTable(){
 }
 
 async function renderStats(){
-
-async function renderStats(){
  try{
   const [clients,vehicles,services,appointments,payments,expenses]=
    await Promise.all([
