@@ -13,6 +13,7 @@ const modules={
 };
 
 let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
+let dashboardPeriod='current';
 
 const $=id=>document.getElementById(id);
 
