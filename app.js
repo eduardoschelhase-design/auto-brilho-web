@@ -50,8 +50,20 @@ async function init(){
   }else if(!window.AUTO_BRILHO_CONFIG.supabaseAnonKey){
     setLoginMessage('ERRO: chave pública ausente.');
   }else{
-    setLoginMessage('ERRO: URL ou chave com formato inválido.');
-  }
+  const cfg = window.AUTO_BRILHO_CONFIG;
+  const url = String(cfg.supabaseUrl || '');
+  const key = String(cfg.supabaseAnonKey || '');
+
+  setLoginMessage(
+    'DIAGNÓSTICO:' +
+    ' URL HTTPS=' + /^https:\/\//.test(url) +
+    ' | URL preenchida=' + !!url +
+    ' | Chave presente=' + !!key +
+    ' | Chave contém COLE_AQUI=' + key.includes('COLE_AQUI') +
+    ' | Tamanho da chave=' + key.length +
+    ' | Prefixo reconhecido=' + /^(sb_publishable_|eyJ)/.test(key)
+  );
+ }
  
   $('loginForm').onsubmit=e=>{
    e.preventDefault();
