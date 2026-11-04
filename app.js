@@ -488,6 +488,360 @@ async function renderTable(){
  }
 }
 
+
+function dashboardLineChart(months,series){
+ const width=640;
+ const height=245;
+ const left=42;
+ const right=15;
+ const top=18;
+ const bottom=38;
+
+ const max=Math.max(
+  1,
+  ...series.flatMap(s=>s.values)
+ );
+
+ const chartHeight=height-top-bottom;
+ const chartWidth=width-left-right;
+
+ const x=i=>left+
+  (months.length<=1?0:i*chartWidth/(months.length-1));
+
+ const y=value=>top+
+  chartHeight-(value/max)*chartHeight;
+
+ let grid='';
+
+ for(let i=0;i<=4;i++){
+  const gy=top+i*chartHeight/4;
+  grid+=`
+   <line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}"
+    stroke="#e1e3e6" stroke-width="1"/>
+  `;
+ }
+
+ const labels=months.map((m,i)=>`
+  <text x="${x(i)}" y="${height-10}"
+   text-anchor="middle" font-size="11" fill="#69717c">
+   ${esc(m.short)}
+  </text>
+ `).join('');
+
+ const lines=series.map(s=>{
+  const points=s.values.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+
+  const dots=s.values.map((v,i)=>`
+   <circle cx="${x(i)}" cy="${y(v)}" r="3.5"
+    fill="${s.color}"/>
+  `).join('');
+
+  return `
+   <polyline points="${points}" fill="none"
+    stroke="${s.color}" stroke-width="3"
+    stroke-linecap="round" stroke-linejoin="round"/>
+   ${dots}
+  `;
+ }).join('');
+
+ return `
+  <svg viewBox="0 0 ${width} ${height}"
+   role="img" aria-label="Gráfico de evolução mensal">
+   ${grid}
+   ${lines}
+   ${labels}
+  </svg>
+ `;
+}
+
+function dashboardBars(months,values){
+ const max=Math.max(1,...values);
+ return `
+  <div class="dashboard-bars">
+   ${months.map((m,i)=>{
+    const height=Math.max(2,values[i]/max*100);
+    return `
+     <div class="dashboard-bar-item">
+      <div class="dashboard-bar-value">${values[i]}</div>
+      <div class="dashboard-bar-track">
+       <div class="dashboard-bar-fill" style="height:${height}%"></div>
+      </div>
+      <div class="dashboard-bar-label">${esc(m.short)}</div>
+     </div>
+    `;
+   }).join('')}
+  </div>
+ `;
+}
+
+function dashboardVariation(current,previous){
+ if(previous===0){
+  return current===0?'Sem variação':'Novo';
+ }
+
+ const variation=((current-previous)/previous)*100;
+ const signal=variation>0?'+':'';
+
+ return signal+variation.toLocaleString('pt-BR',{
+  maximumFractionDigits:1
+ })+'%';
+}
+
+async function renderDashboards(){
+ const target=$('tableWrap');
+
+ target.innerHTML=`
+  <div class="dashboard-loading">
+   Carregando indicadores da nuvem...
+  </div>
+ `;
+
+ try{
+  const [services,payments,expenses]=await Promise.all([
+   all('services'),
+   all('payments'),
+   all('expenses')
+  ]);
+
+  const now=new Date();
+
+  const currentMonth=
+   now.getFullYear()+'-'+
+   String(now.getMonth()+1).padStart(2,'0');
+
+  const months=[];
+
+  for(let i=11;i>=0;i--){
+   const d=new Date(
+    now.getFullYear(),
+    now.getMonth()-i,
+    1
+   );
+
+   const key=
+    d.getFullYear()+'-'+
+    String(d.getMonth()+1).padStart(2,'0');
+
+   months.push({
+    key,
+    short:d.toLocaleDateString('pt-BR',{
+     month:'short'
+    }).replace('.',''),
+    label:d.toLocaleDateString('pt-BR',{
+     month:'long',
+     year:'numeric'
+    })
+   });
+  }
+
+  const monthly=months.map(m=>{
+   const revenue=payments
+    .filter(p=>
+     p.status==='Pago' &&
+     p.date &&
+     p.date.slice(0,7)===m.key
+    )
+    .reduce((sum,p)=>sum+Number(p.value||0),0);
+
+   const spent=expenses
+    .filter(e=>
+     e.date &&
+     e.date.slice(0,7)===m.key
+    )
+    .reduce((sum,e)=>sum+Number(e.value||0),0);
+
+   const completed=services.filter(s=>
+    s.status==='Concluído' &&
+    s.date &&
+    s.date.slice(0,7)===m.key
+   ).length;
+
+   return {
+    ...m,
+    revenue,
+    spent,
+    balance:revenue-spent,
+    completed
+   };
+  });
+
+  const current=monthly[11];
+  const previous=monthly[10];
+
+  const expensePercent=current.revenue>0
+   ?current.spent/current.revenue*100
+   :null;
+
+  const rangeMonths=monthly.slice(-dashboardChartRange);
+
+  const cards=[
+   {
+    label:'Faturamento do mês',
+    value:money(current.revenue),
+    variation:dashboardVariation(
+     current.revenue,previous.revenue
+    ),
+    description:'Comparado ao mês anterior'
+   },
+   {
+    label:'Despesas do mês',
+    value:money(current.spent),
+    variation:dashboardVariation(
+     current.spent,previous.spent
+    ),
+    description:'Comparado ao mês anterior'
+   },
+   {
+    label:'Saldo do mês',
+    value:money(current.balance),
+    variation:dashboardVariation(
+     current.balance,previous.balance
+    ),
+    description:'Faturamento menos despesas'
+   },
+   {
+    label:'Despesas / faturamento',
+    value:expensePercent===null
+     ?'Sem faturamento'
+     :expensePercent.toLocaleString('pt-BR',{
+       maximumFractionDigits:1
+      })+'%',
+    variation:'',
+    description:'Percentual das despesas sobre a receita'
+   }
+  ];
+
+  const revenueExpenseChart=dashboardLineChart(
+   rangeMonths,
+   [
+    {
+     name:'Faturamento',
+     color:'#d71920',
+     values:rangeMonths.map(m=>m.revenue)
+    },
+    {
+     name:'Despesas',
+     color:'#292929',
+     values:rangeMonths.map(m=>m.spent)
+    }
+   ]
+  );
+
+  const servicesChart=dashboardBars(
+   rangeMonths,
+   rangeMonths.map(m=>m.completed)
+  );
+
+  target.innerHTML=`
+   <div class="dashboard-content">
+
+    <div class="dashboard-period-note">
+     <strong>Visão geral: ${esc(current.label)}</strong>
+     <span>O mês atual ainda está em andamento.</span>
+    </div>
+
+    <div class="dashboard-metrics">
+     ${cards.map(c=>`
+      <div class="dashboard-metric">
+       <span>${esc(c.label)}</span>
+       <strong>${esc(c.value)}</strong>
+       ${c.variation?`<b>${esc(c.variation)}</b>`:''}
+       <small>${esc(c.description)}</small>
+      </div>
+     `).join('')}
+    </div>
+
+    <div class="dashboard-chart-panel">
+     <div class="dashboard-chart-head">
+      <div>
+       <h3>Evolução financeira</h3>
+       <p>Faturamento recebido e despesas registradas</p>
+      </div>
+
+      <select id="dashboardChartRange"
+       aria-label="Período dos gráficos">
+       <option value="6">Últimos 6 meses</option>
+       <option value="12">Últimos 12 meses</option>
+      </select>
+     </div>
+
+     <div class="dashboard-legend">
+      <span><i class="legend-revenue"></i>Faturamento</span>
+      <span><i class="legend-expense"></i>Despesas</span>
+     </div>
+
+     <div class="dashboard-svg-wrap">
+      ${revenueExpenseChart}
+     </div>
+    </div>
+
+    <div class="dashboard-chart-panel">
+     <h3>Serviços concluídos</h3>
+     <p>Quantidade de serviços por mês</p>
+     ${servicesChart}
+    </div>
+
+    <div class="dashboard-chart-panel">
+     <h3>Comparativo mensal</h3>
+     <p>Valores do mês atual em relação ao anterior</p>
+
+     <div class="dashboard-comparison">
+      <div>
+       <span>Indicador</span>
+       <strong>Mês anterior</strong>
+       <strong>Mês atual</strong>
+      </div>
+
+      <div>
+       <span>Faturamento</span>
+       <strong>${money(previous.revenue)}</strong>
+       <strong>${money(current.revenue)}</strong>
+      </div>
+
+      <div>
+       <span>Despesas</span>
+       <strong>${money(previous.spent)}</strong>
+       <strong>${money(current.spent)}</strong>
+      </div>
+
+      <div>
+       <span>Serviços concluídos</span>
+       <strong>${previous.completed}</strong>
+       <strong>${current.completed}</strong>
+      </div>
+     </div>
+    </div>
+
+    <p class="dashboard-footnote">
+     Fonte: registros reais do Supabase. Faturamento considera
+     somente pagamentos com situação Pago. Despesas consideram
+     os lançamentos registrados. Valores não representam
+     necessariamente lucro contábil.
+    </p>
+
+   </div>
+  `;
+
+  const selector=$('dashboardChartRange');
+
+  selector.value=String(dashboardChartRange);
+
+  selector.onchange=()=>{
+   dashboardChartRange=Number(selector.value);
+   renderDashboards();
+  };
+
+ }catch(err){
+  console.error('Erro ao carregar dashboards:',err);
+
+  target.innerHTML=`
+   <div class="empty">
+    Não foi possível carregar os dashboards.
+    Verifique sua conexão e tente atualizar.
+   </div>
+  `;
+ }
+     
 async function renderStats(){
  try{
   const [clients,vehicles,services,appointments,payments,expenses]=
