@@ -422,6 +422,10 @@ async function renderClientVehicleTable(){
 }
 
 async function renderTable(){
+ if(active==='dashboard'){
+  await renderDashboards();
+  return;
+ }
  if(active==='clients'){
   await renderClientVehicleTable();
   return;
