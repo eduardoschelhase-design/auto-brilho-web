@@ -55,15 +55,20 @@ async function init(){
   const key = String(cfg.supabaseAnonKey || '');
 
   setLoginMessage(
-    'DIAGNÓSTICO:' +
-    ' URL HTTPS=' + /^https:\/\//.test(url) +
-    ' | URL preenchida=' + !!url +
-    ' | Chave presente=' + !!key +
-    ' | Chave contém COLE_AQUI=' + key.includes('COLE_AQUI') +
-    ' | Tamanho da chave=' + key.length +
-    ' | Prefixo reconhecido=' + /^(sb_publishable_|eyJ)/.test(key)
-  );
- }
+  const cfg = window.AUTO_BRILHO_CONFIG;
+const url = String(cfg?.supabaseUrl || '').trim();
+const key = String(cfg?.supabaseAnonKey || '').trim();
+
+setLoginMessage(
+  'TESTE FINAL:' +
+  ' | Biblioteca=' + !!window.supabase +
+  ' | Configuração=' + !!cfg +
+  ' | HTTPS=' + /^https:\/\//.test(url) +
+  ' | URL placeholder=' + url.includes('COLE_AQUI') +
+  ' | Chave preenchida=' + !!key +
+  ' | Chave placeholder=' + key.includes('COLE_AQUI') +
+  ' | configured()=' + configured()
+);
  
   $('loginForm').onsubmit=e=>{
    e.preventDefault();
