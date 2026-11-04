@@ -11,16 +11,16 @@ const modules={
 };
 let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false;
 const $=id=>document.getElementById(id);
-const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO_BRILHO_CONFIG.supabaseUrl) && !window.AUTO_BRILHO_CONFIG.supabaseUrl.includes('COLE_AQUI') && window.AUTO_BRILHO_CONFIG.supabaseAnonKey && !window.AUTO_BRILHO_CONFIG.supabaseAnonKey.includes('COLE_AQUI');
+const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO_BRILHO_CONFIG.sbClientUrl) && !window.AUTO_BRILHO_CONFIG.sbClientUrl.includes('COLE_AQUI') && window.AUTO_BRILHO_CONFIG.sbClientAnonKey && !window.AUTO_BRILHO_CONFIG.sbClientAnonKey.includes('COLE_AQUI');
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function dateBR(v){if(!v)return '';const p=String(v).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:v}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 function setLoginMessage(msg){$('loginMessage').textContent=msg}
 function showApp(show){$('loginScreen').classList.toggle('hidden',show);$('appShell').classList.toggle('hidden',!show);$('logoutBtn').classList.toggle('hidden',!show)}
-async function all(store){const {data,error}=await supabase.from(store).select('id,data,created_at,updated_at').order('created_at',{ascending:false});if(error)throw error;return (data||[]).map(r=>({...r.data,id:r.id,createdAt:r.created_at,updatedAt:r.updated_at}))}
-async function save(store,item){const payload={data:{...item}};delete payload.data.id;delete payload.data.createdAt;delete payload.data.updatedAt;if(item.id)payload.id=item.id;const {data,error}=await supabase.from(store).upsert(payload).select('id,data,created_at,updated_at').single();if(error)throw error;return {...data.data,id:data.id,createdAt:data.created_at,updatedAt:data.updated_at}}
-async function remove(store,id){const {error}=await supabase.from(store).delete().eq('id',id);if(error)throw error}
+async function all(store){const {data,error}=await sbClient.from(store).select('id,data,created_at,updated_at').order('created_at',{ascending:false});if(error)throw error;return (data||[]).map(r=>({...r.data,id:r.id,createdAt:r.created_at,updatedAt:r.updated_at}))}
+async function save(store,item){const payload={data:{...item}};delete payload.data.id;delete payload.data.createdAt;delete payload.data.updatedAt;if(item.id)payload.id=item.id;const {data,error}=await sbClient.from(store).upsert(payload).select('id,data,created_at,updated_at').single();if(error)throw error;return {...data.data,id:data.id,createdAt:data.created_at,updatedAt:data.updated_at}}
+async function remove(store,id){const {error}=await sbClient.from(store).delete().eq('id',id);if(error)throw error}
 function renderTabs(){ $('tabs').innerHTML=Object.entries(modules).map(([k,m])=>`<button class="tab ${k===active?'active':''}" data-tab="${k}">${m.icon} ${m.label}</button>`).join('');$('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{active=b.dataset.tab;editId=null;$('formWrap').classList.add('hidden');renderTabs();renderSection()}) }
 function renderSection(){const m=modules[active];$('sectionTitle').textContent=m.label;$('sectionEyebrow').textContent='CADASTROS E CONTROLE';$('addBtn').textContent='+ Novo '+m.singular;$('searchInput').value='';renderTable()}
 function renderForm(item={}){const m=modules[active];editId=item.id??null;$('formWrap').innerHTML=`<form id="recordForm"><div class="form-grid">${m.fields.map(([key,label,type,required,opts])=>{let input='';if(type==='select')input=`<select name="${key}" ${required?'required':''}><option value="">Selecione...</option>${opts.map(o=>`<option ${item[key]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;else if(type==='textarea')input=`<textarea name="${key}" rows="2">${esc(item[key]||'')}</textarea>`;else input=`<input name="${key}" type="${type}" ${required?'required':''} ${type==='number'?'min="0" step="0.01"':''} value="${esc(item[key]??(type==='date'?new Date().toISOString().slice(0,10):''))}" placeholder="${type==='number'?'0,00':''}">`;return `<div class="field"><label>${esc(label)}${required?' *':''}</label>${input}</div>`}).join('')}</div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar cadastro'}</button></div></form>`;$('formWrap').classList.remove('hidden');$('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null};$('recordForm').onsubmit=async e=>{e.preventDefault();const submit=e.target.querySelector('[type=submit]');submit.disabled=true;try{const data=Object.fromEntries(new FormData(e.target).entries());if('value'in data)data.value=Number(data.value||0);if(editId)data.id=editId;else data.createdAt=new Date().toISOString();await save(m.store,data);$('formWrap').classList.add('hidden');editId=null;showToast('Cadastro salvo na nuvem.');await renderTable();await renderStats()}catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'))}finally{submit.disabled=false}}}
@@ -28,7 +28,7 @@ async function renderTable(){const m=modules[active];try{const rows=await all(m.
 async function renderStats(){try{const [clients,vehicles,services,payments,expenses,appointments]=await Promise.all(Object.values(modules).map(m=>all(m.store)));const paid=payments.filter(p=>p.status==='Pago').reduce((s,p)=>s+Number(p.value||0),0);const spent=expenses.reduce((s,p)=>s+Number(p.value||0),0);const stats=[['Clientes',clients.length],['Veículos',vehicles.length],['Agendamentos',appointments.filter(a=>['Agendado','Confirmado'].includes(a.status)).length],['Saldo registrado',money(paid-spent)]];$('stats').innerHTML=stats.map(([l,v])=>`<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('')}catch(e){console.error(e)}}
 async function exportExcel(){const status=$('exportStatus');status.textContent='Preparando os relatórios da nuvem...';if(!window.XLSX){status.textContent='Gerador Excel indisponível.\nVerifique a internet.';return}try{const wb=XLSX.utils.book_new();for(const [key,m] of Object.entries(modules)){const records=await all(m.store);const data=records.map(r=>{const o={};m.fields.forEach(([k,label])=>o[label]=k==='date'?dateBR(r[k]):k==='value'?Number(r[k]||0):r[k]??'');return o});const ws=XLSX.utils.json_to_sheet(data.length?data:[Object.fromEntries(m.fields.map(f=>[f[1],'']))]);if(data.length===0)XLSX.utils.sheet_add_aoa(ws,[['Sem registros cadastrados']],{origin:'A2'});XLSX.utils.book_append_sheet(wb,ws,m.label.slice(0,31))}const stamp=new Date().toISOString().slice(0,10);XLSX.writeFile(wb,`Auto_Brilho_Relatorios_${stamp}.xlsx`);status.textContent='Arquivo Excel gerado com seis abas.';showToast('Relatórios Excel exportados.')}catch(e){status.textContent='Falha ao gerar relatório: '+e.message}}
 async function backupJSON(){try{const backup={app:'Auto Brilho Web',version:2,exportedAt:new Date().toISOString(),data:{}};for(const [key,m] of Object.entries(modules))backup.data[key]=await all(m.store);const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Auto_Brilho_Backup_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);showToast('Backup completo baixado.\nGuarde em local seguro.')}catch(e){showToast('Não foi possível criar backup: '+e.message)}}
-function subscribeRealtime(){if(realtimeChannel)supabase.removeChannel(realtimeChannel);realtimeChannel=supabase.channel('auto-brilho-sync').on('postgres_changes',{event:'*',schema:'public'},()=>{renderTable();renderStats()}).subscribe()}
+function subscribeRealtime(){if(realtimeChannel)sbClient.removeChannel(realtimeChannel);realtimeChannel=sbClient.channel('auto-brilho-sync').on('postgres_changes',{event:'*',schema:'public'},()=>{renderTable();renderStats()}).subscribe()}
 async function enterApp(){showApp(true);renderTabs();renderSection();await renderStats();subscribeRealtime()}
 function recoveryLinkPresent(){const hash=new URLSearchParams(location.hash.replace(/^#/,''));const query=new URLSearchParams(location.search);return hash.get('type')==='recovery'||query.get('type')==='recovery'}
 function showRecovery(message=''){recoveryMode=true;$('loginScreen').classList.add('hidden');$('appShell').classList.add('hidden');$('recoveryScreen').classList.remove('hidden');$('logoutBtn').classList.add('hidden');if(message)$('recoveryMessage').textContent=message}
@@ -38,9 +38,9 @@ async function init(){
  setLoginMessage('DIAGNÓSTICO: INIT INICIADO');
  recoveryMode=recoveryLinkPresent();
 
- if(!window.supabase||!configured()){
+ if(!window.sbClient||!configured()){
   showApp(false);
-  setLoginMessage('Antes de entrar, configure a URL e a chave pública do Supabase no arquivo config.js. Veja o README.');
+  setLoginMessage('Antes de entrar, configure a URL e a chave pública do sbClient no arquivo config.js. Veja o README.');
   $('loginForm').onsubmit=e=>{
    e.preventDefault();
    setLoginMessage('Configuração pendente: complete config.js e publique novamente.');
@@ -48,12 +48,12 @@ async function init(){
   return;
  }
 
- supabase=window.supabase.createClient(
-  window.AUTO_BRILHO_CONFIG.supabaseUrl,
-  window.AUTO_BRILHO_CONFIG.supabaseAnonKey
+ sbClient=window.sbClient.createClient(
+  window.AUTO_BRILHO_CONFIG.sbClientUrl,
+  window.AUTO_BRILHO_CONFIG.sbClientAnonKey
  );
 
- const {data:{session},error:sessionError}=await supabase.auth.getSession();
+ const {data:{session},error:sessionError}=await sbClient.auth.getSession();
  if(sessionError)console.error('Erro ao recuperar sessão:',sessionError);
 
  if(recoveryMode){
@@ -64,8 +64,8 @@ async function init(){
   showApp(false);
  }
 
- // Callback de autenticação corrigido: não executa operações do Supabase diretamente nele.
- supabase.auth.onAuthStateChange((event, session)=>{
+ // Callback de autenticação corrigido: não executa operações do sbClient diretamente nele.
+ sbClient.auth.onAuthStateChange((event, session)=>{
   setLoginMessage(
    'DIAGNÓSTICO: evento '+event+
    ' | sessão: '+(session?'PRESENTE':'AUSENTE')
