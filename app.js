@@ -541,4 +541,10 @@ async function backupJSON(){
   a.download=`Auto_Brilho_Backup_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
 
-  URL
+  URL.revokeObjectURL(url);
+
+showToast('Backup gerado com sucesso.');
+ }catch(e){
+  showToast('Erro ao gerar backup: '+e.message);
+ }
+}
