@@ -48,7 +48,7 @@ async function init(){
   return;
  }
 
- sbClient=window.sbClient.createClient(
+ sbClient=window.supabase.createClient(
   window.AUTO_BRILHO_CONFIG.sbClientUrl,
   window.AUTO_BRILHO_CONFIG.sbClientAnonKey
  );
