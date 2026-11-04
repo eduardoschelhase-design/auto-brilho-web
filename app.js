@@ -9,7 +9,7 @@ const modules={
  services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Concluído','Em andamento','Cancelado']],['paymentStatus','Situação financeira','select',false,['Recebido','Pendente']],['paymentMethod','Tipo de pagamento','select',false,['Dinheiro','Pix','Cartão','Brinde']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]},
  appointments:{label:'Agendamentos',singular:'agendamento',icon:'▦',store:'appointments',fields:[['date','Data','date',true],['time','Horário','time',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço solicitado','text',true],['value','Valor (R$)','number',false],['status','Situação','select',true,['Agendado','Confirmado','Concluído','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]},
  payments:{label:'Receitas e pagamentos',singular:'pagamento',icon:'R$',store:'payments',fields:[['date','Data','date',true],['client','Cliente','text',true],['description','Descrição','text',true],['method','Forma de pagamento','select',true,['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Brinde','Outro']],['value','Valor (R$)','number',true],['status','Situação','select',true,['Pago','Pendente','Brinde','Estornado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]},
- expenses:{label:'Despesas',singular:'despesa',icon:'−',store:'expenses',fields:[['date','Data','date',true],['category','Categoria','select',true,['Produtos de limpeza','Água','Energia','Aluguel','Equipamentos','Manutenção','Combustível','Salários / mão de obra','Impostos e taxas','Marketing','Outros']],['description','Descrição','text',true],['supplier','Fornecedor','text',false],['value','Valor (R$)','number',true],['payment','Forma de pagamento','select',false,['Pix','Dinheiro','Cartão','Transferência','Outro']],['notes','Observações','textarea',false]],columns:[['date','Data'],['category','Categoria'],['description','Descrição'],['supplier','Fornecedor'],['value','Valor']]}
+ expenses:{label:'Despesas',singular:'despesa',icon:'−',store:'expenses',fields:[['date','Data do pagamento','date',false],['dueDate','Data de vencimento','date',false],['category','Categoria','select',false,['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo']],['subcategory','Subcategoria','text',false],['description','Descrição','text',true],['supplier','Fornecedor','text',false],['value','Valor (R$)','number',true],['payment','Forma de pagamento','select',false,['Pix','Dinheiro','Cartão','Transferência','Débito automático','Outro']],['paymentStatus','Situação','select',false,['Em aberto','Pago']],['notes','Observações','textarea',false]],columns:[['date','Data'],['category','Categoria'],['subcategory','Subcategoria'],['description','Descrição'],['value','Valor']]}
 };
 
 let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
@@ -38,6 +38,7 @@ function bindDecimalInput(input){
   if(Number.isFinite(n))input.value=decimalText(n);
  });
 }
+function localISODate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function dateBR(v){if(!v)return '';const p=String(v).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:v}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 function setLoginMessage(msg){$('loginMessage').textContent=msg}
@@ -70,7 +71,8 @@ function renderTabs(){
   ['dashboard','▥','Dashboards'],
   ...Object.entries(modules)
    .filter(([k])=>k!=='vehicles')
-   .map(([k,m])=>[k,m.icon,m.label])
+   .map(([k,m])=>[k,m.icon,m.label]),
+  ['payables','◷','Contas a pagar']
  ];
 
  $('tabs').innerHTML=tabs.map(([key,icon,label])=>
@@ -95,12 +97,14 @@ function renderTabs(){
 
 function renderSection(){
  const isDashboard=active==='dashboard';
+ const isPayables=active==='payables';
 
  $('sectionEyebrow').textContent=
   isDashboard?'ANÁLISE DO NEGÓCIO':'CADASTROS E CONTROLE';
 
  $('sectionTitle').textContent=
   isDashboard?'Dashboards':
+  isPayables?'Contas a pagar':
   active==='clients'?'Clientes e veículos':
   modules[active].label;
 
@@ -115,7 +119,8 @@ function renderSection(){
 
  $('addBtn').textContent=
   active==='clients'?'+ Novo cadastro':
-  '+ Novo '+modules[active].singular;
+  isPayables?'+ Nova conta a pagar':
+  '+ Nova '+modules[active].singular;
 
  $('searchInput').value='';
  renderTable();
@@ -134,6 +139,11 @@ function renderForm(item={}){
 
  if(active==='appointments'){
   renderAppointmentForm(item);
+  return;
+ }
+
+ if(active==='expenses'||active==='payables'){
+  renderExpenseForm(item,active==='payables');
   return;
  }
 
@@ -180,6 +190,90 @@ function renderForm(item={}){
    submit.disabled=false;
   }
  };
+}
+
+// Despesas pagas e contas a pagar compartilham o mesmo registro,
+// evitando duplicidade quando uma conta é quitada.
+const expenseCategories=['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo'];
+const expensePaymentMethods=['Pix','Dinheiro','Cartão','Transferência','Débito automático','Outro'];
+function renderExpenseForm(item={},isPayable=false){
+ editId=item.id??null;
+ const today=localISODate();
+ const dueDate=item.dueDate||item.date||today;
+ const formTitle=isPayable?'Conta a pagar':'Despesa paga';
+ $('formWrap').innerHTML=`<form id="expenseForm">
+  <div class="form-grid">
+   <div class="field"><label>Categoria *</label><select name="category" required><option value="">Selecione...</option>${expenseCategories.map(c=>`<option ${item.category===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+   <div class="field"><label>Subcategoria (editável)</label><input name="subcategory" type="text" value="${esc(item.subcategory||'')}" placeholder="Ex.: shampoo, salário, aluguel"></div>
+   <div class="field"><label>Descrição *</label><input name="description" required value="${esc(item.description||'')}" placeholder="Descrição da conta ou despesa"></div>
+   <div class="field"><label>Fornecedor / beneficiário</label><input name="supplier" value="${esc(item.supplier||'')}"></div>
+   <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00"></div>
+   ${isPayable?`<div class="field"><label>Data de vencimento *</label><input name="dueDate" type="date" required value="${esc(dueDate)}"></div>`:`<div class="field"><label>Data do pagamento *</label><input name="date" type="date" required value="${esc(item.date||today)}"></div>`}
+   ${!isPayable?`<div class="field"><label>Forma de pagamento</label><select name="payment"><option value="">Selecione...</option>${expensePaymentMethods.map(m=>`<option ${item.payment===m?'selected':''}>${esc(m)}</option>`).join('')}</select></div>`:''}
+   <div class="field"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
+  </div>
+  <div class="form-actions"><button type="button" class="secondary" id="cancelExpenseForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':isPayable?'Salvar conta':'Salvar despesa'}</button></div>
+ </form>`;
+ $('formWrap').classList.remove('hidden');
+ bindDecimalInput($('expenseForm').elements.value);
+ $('cancelExpenseForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ $('expenseForm').onsubmit=async e=>{
+  e.preventDefault();
+  const submit=e.target.querySelector('[type=submit]');submit.disabled=true;
+  try{
+   const data=Object.fromEntries(new FormData(e.target).entries());
+   data.value=decimalValue(data.value);
+   if(!Number.isFinite(data.value)||data.value<=0)throw new Error('Informe um valor maior que zero.');
+   if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
+   if(isPayable){
+    data.paymentStatus='Em aberto';
+    data.date='';
+    data.dueDate=data.dueDate;
+    delete data.payment;
+   }else{
+    data.paymentStatus='Pago';
+    data.dueDate=item.dueDate||data.date;
+    data.paidAt=data.date;
+   }
+   await save('expenses',data);
+   $('formWrap').classList.add('hidden');editId=null;
+   showToast(isPayable?'Conta a pagar salva.':'Despesa registrada.');
+   await renderTable();await renderStats();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
+  finally{submit.disabled=false;}
+ };
+}
+
+async function renderPayablesTable(){
+ try{
+  const rows=await all('expenses');
+  const q=$('searchInput').value.trim().toLocaleLowerCase('pt-BR');
+  const open=rows.filter(r=>r.paymentStatus==='Em aberto'||r.paymentStatus==='Pendente')
+   .filter(r=>!q||Object.values(r).some(v=>String(v??'').toLocaleLowerCase('pt-BR').includes(q)));
+  const total=open.reduce((n,r)=>n+Number(r.value||0),0);
+  $('tableWrap').innerHTML=`<div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Contas em aberto</span><strong>${open.length}</strong></div><div class="dashboard-metric"><span>Total a pagar</span><strong>${money(total)}</strong></div></div>
+   ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dateBR(r.dueDate||r.date)}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhuma conta em aberto.</div>'}`;
+  $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>renderForm(open.find(r=>r.id===b.dataset.edit)));
+  $('tableWrap').querySelectorAll('[data-pay]').forEach(b=>b.onclick=async()=>{
+   const r=open.find(x=>x.id===b.dataset.pay);if(!r)return;
+   if(!confirm(`Confirmar o pagamento de ${money(r.value)} referente a “${r.description}”?`))return;
+   const method=prompt('Informe a forma de pagamento: Pix, Dinheiro, Cartão, Transferência, Débito automático ou Outro.','Pix');
+   if(method===null)return;
+   const allowed=expensePaymentMethods.find(x=>x.toLocaleLowerCase('pt-BR')===method.trim().toLocaleLowerCase('pt-BR'));
+   if(!allowed){showToast('Forma de pagamento inválida.');return;}
+   try{
+    const paidDate=localISODate();
+    await save('expenses',{...r,paymentStatus:'Pago',payment:allowed,date:paidDate,paidAt:paidDate});
+    showToast('Pagamento confirmado e lançado em Despesas.');
+    await renderTable();await renderStats();
+   }catch(err){showToast('Erro ao confirmar pagamento: '+err.message);}
+  });
+  $('tableWrap').querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Excluir esta conta a pagar?'))return;
+   try{await remove('expenses',b.dataset.delete);showToast('Conta excluída.');await renderTable();await renderStats();}
+   catch(err){showToast('Erro ao excluir: '+err.message);}
+  });
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar as contas a pagar. Verifique a conexão.</div>';console.error(err);}
 }
 
 // Lançamento de serviço iniciado pela placa do veículo.
@@ -680,6 +774,7 @@ async function renderTable(){
   await renderClientVehicleTable();
   return;
  }
+ if(active==='payables'){await renderPayablesTable();return;}
 
  const m=modules[active];
 
@@ -687,14 +782,15 @@ async function renderTable(){
   const rows=await all(m.store);
   const q=$('searchInput').value.trim().toLocaleLowerCase('pt-BR');
 
-  const filtered=rows.filter(r=>
+  const visibleRows=active==='expenses'?rows.filter(r=>r.paymentStatus!=='Em aberto'&&r.paymentStatus!=='Pendente'):rows;
+  const filtered=visibleRows.filter(r=>
    !q||Object.values(r).some(v=>
     String(v??'').toLocaleLowerCase('pt-BR').includes(q)
    )
   );
 
   if(!filtered.length){
-   $('tableWrap').innerHTML=`<div class="empty">${rows.length?'Nenhum resultado para esta busca.':'Ainda não há registros aqui.\nToque em “+ Novo cadastro” para começar.'}</div>`;
+   $('tableWrap').innerHTML=`<div class="empty">${rows.length?(active==='expenses'?'Não há despesas pagas nesta lista. Contas em aberto ficam na aba “Contas a pagar”.':'Nenhum resultado para esta busca.'):'Ainda não há registros aqui.\nToque em “+ Novo cadastro” para começar.'}</div>`;
    return;
   }
 
@@ -852,11 +948,12 @@ async function renderDashboards(){
  `;
 
  try{
-  const [services,payments,expenses]=await Promise.all([
+  const [services,payments,allExpenses]=await Promise.all([
    all('services'),
    all('payments'),
    all('expenses')
   ]);
+  const expenses=allExpenses.filter(e=>e.paymentStatus!=='Em aberto'&&e.paymentStatus!=='Pendente');
 
   const now=new Date();
 
@@ -1189,7 +1286,7 @@ async function renderStats(){
   const periodServices=services.filter(inPeriod);
   const periodAppointments=appointments.filter(inPeriod);
   const periodPayments=payments.filter(inPeriod);
-  const periodExpenses=expenses.filter(inPeriod);
+  const periodExpenses=expenses.filter(e=>(e.paymentStatus!=='Em aberto'&&e.paymentStatus!=='Pendente')&&inPeriod(e));
 
   // Somente serviços concluídos.
   const completed=periodServices.filter(
@@ -1282,11 +1379,13 @@ async function renderStats(){
 }
 
 async function renderDailyClose(){
- const date=prompt('Informe a data do fechamento (AAAA-MM-DD):',new Date().toISOString().slice(0,10));
+ const date=prompt('Informe a data do fechamento (AAAA-MM-DD):',localISODate());
  if(date===null)return;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){showToast('Data inválida. Use AAAA-MM-DD.');return;}
  try{
-  const [services,payments]=await Promise.all([all('services'),all('payments')]);
+  const [services,payments,allExpenses]=await Promise.all([all('services'),all('payments'),all('expenses')]);
+  const expenses=allExpenses.filter(e=>e.paymentStatus!=='Em aberto'&&e.paymentStatus!=='Pendente'&&e.date===date);
+  const payables=allExpenses.filter(e=>e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente');
   const completed=services.filter(s=>s.date===date&&s.status==='Concluído');
   const received=payments.filter(p=>p.date===date&&p.status==='Pago');
   const pending=payments.filter(p=>p.date===date&&p.status==='Pendente');
@@ -1295,6 +1394,8 @@ async function renderDailyClose(){
   const totalReceived=received.reduce((n,p)=>n+Number(p.value||0),0);
   const totalPending=pending.reduce((n,p)=>n+Number(p.value||0),0);
   const totalGifts=gifts.reduce((n,p)=>n+Number(p.value||0),0);
+  const totalExpenses=expenses.reduce((n,e)=>n+Number(e.value||0),0);
+  const totalPayables=payables.reduce((n,e)=>n+Number(e.value||0),0);
   $('tableWrap').innerHTML=`
    <div class="dashboard-chart-panel">
     <div class="dashboard-chart-head"><div><h3>Fechamento do dia</h3><p>${dateBR(date)}</p></div><button class="secondary" id="backDashboard">Voltar ao painel</button></div>
@@ -1304,10 +1405,15 @@ async function renderDailyClose(){
      <div class="dashboard-metric"><span>Recebido</span><strong>${money(totalReceived)}</strong></div>
      <div class="dashboard-metric"><span>Pendente</span><strong>${money(totalPending)}</strong></div>
      <div class="dashboard-metric"><span>Brindes</span><strong>${money(totalGifts)}</strong></div>
+     <div class="dashboard-metric"><span>Despesas pagas</span><strong>${money(totalExpenses)}</strong></div>
+     <div class="dashboard-metric"><span>Saldo após despesas</span><strong>${money(totalReceived-totalExpenses)}</strong></div>
+     <div class="dashboard-metric"><span>Contas a pagar em aberto</span><strong>${money(totalPayables)}</strong></div>
     </div>
     <h3>Serviços concluídos</h3>
     ${completed.length?`<div class="table-scroll"><table><thead><tr><th>Cliente</th><th>Placa</th><th>Serviço</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>${completed.map(s=>`<tr><td>${esc(s.client||'')}</td><td>${esc(s.vehicle||'')}</td><td>${esc(s.service||'')}</td><td>${money(s.value)}</td><td>${esc(s.paymentMethod||'—')} / ${esc(s.paymentStatus||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum serviço concluído nesta data.</p>'}
-    <p class="dashboard-footnote">Recebido considera somente pagamentos com situação Pago. Pendentes e brindes aparecem separados e não entram no total recebido.</p>
+    <h3>Despesas pagas no dia</h3>
+    ${expenses.length?`<div class="table-scroll"><table><thead><tr><th>Categoria</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>${expenses.map(e=>`<tr><td>${esc(e.category||'')}</td><td>${esc(e.description||'')}</td><td>${money(e.value)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhuma despesa paga nesta data.</p>'}
+    <p class="dashboard-footnote">Somente despesas efetivamente pagas entram no fechamento. Contas em aberto aparecem separadamente e não reduzem o saldo do dia.</p>
    </div>`;
   $('backDashboard').onclick=()=>renderDashboards();
  }catch(err){showToast('Não foi possível gerar o fechamento: '+err.message);}
@@ -1331,7 +1437,7 @@ async function exportExcel(){
    const data=records.map(r=>{
     const o={};
     m.fields.forEach(([k,label])=>
-     o[label]=k==='date'?dateBR(r[k]):k==='value'?Number(r[k]||0):r[k]??''
+     o[label]=(k==='date'||k==='dueDate')?dateBR(r[k]):k==='value'?Number(r[k]||0):r[k]??''
     );
     return o;
    });
