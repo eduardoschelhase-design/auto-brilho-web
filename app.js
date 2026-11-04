@@ -6,9 +6,9 @@ const DB_NAME='AutoBrilhoDB', DB_VERSION=1;
 const modules={
  clients:{label:'Clientes',singular:'cliente',icon:'♙',store:'clients',fields:[['name','Nome completo','text',true],['phone','Telefone / WhatsApp','tel',false],['email','E-mail','email',false],['document','CPF / CNPJ','text',false],['address','Endereço','text',false],['notes','Observações','textarea',false]],columns:[['name','Nome'],['phone','Telefone'],['document','CPF / CNPJ']]},
  vehicles:{label:'Veículos',singular:'veículo',icon:'🚗',store:'vehicles',fields:[['client','Cliente','text',true],['plate','Placa','text',true],['type','Tipo de veículo','select',true,['Carro','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],['brand','Marca','text',false],['model','Modelo','text',false],['color','Cor','text',false],['notes','Observações','textarea',false]],columns:[['plate','Placa'],['client','Cliente'],['type','Tipo'],['model','Modelo']]},
- services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Concluído','Em andamento','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]},
- appointments:{label:'Agendamentos',singular:'agendamento',icon:'▦',store:'appointments',fields:[['date','Data','date',true],['time','Horário','time',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço solicitado','text',true],['status','Situação','select',true,['Agendado','Confirmado','Concluído','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['status','Situação']]},
- payments:{label:'Receitas e pagamentos',singular:'pagamento',icon:'R$',store:'payments',fields:[['date','Data','date',true],['client','Cliente','text',true],['description','Descrição','text',true],['method','Forma de pagamento','select',true,['Pix','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Outro']],['value','Valor (R$)','number',true],['status','Situação','select',true,['Pago','Pendente','Estornado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]},
+ services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Concluído','Em andamento','Cancelado']],['paymentStatus','Situação financeira','select',false,['Recebido','Pendente']],['paymentMethod','Tipo de pagamento','select',false,['Dinheiro','Pix','Cartão','Brinde']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]},
+ appointments:{label:'Agendamentos',singular:'agendamento',icon:'▦',store:'appointments',fields:[['date','Data','date',true],['time','Horário','time',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço solicitado','text',true],['value','Valor (R$)','number',false],['status','Situação','select',true,['Agendado','Confirmado','Concluído','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]},
+ payments:{label:'Receitas e pagamentos',singular:'pagamento',icon:'R$',store:'payments',fields:[['date','Data','date',true],['client','Cliente','text',true],['description','Descrição','text',true],['method','Forma de pagamento','select',true,['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Brinde','Outro']],['value','Valor (R$)','number',true],['status','Situação','select',true,['Pago','Pendente','Brinde','Estornado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]},
  expenses:{label:'Despesas',singular:'despesa',icon:'−',store:'expenses',fields:[['date','Data','date',true],['category','Categoria','select',true,['Produtos de limpeza','Água','Energia','Aluguel','Equipamentos','Manutenção','Combustível','Salários / mão de obra','Impostos e taxas','Marketing','Outros']],['description','Descrição','text',true],['supplier','Fornecedor','text',false],['value','Valor (R$)','number',true],['payment','Forma de pagamento','select',false,['Pix','Dinheiro','Cartão','Transferência','Outro']],['notes','Observações','textarea',false]],columns:[['date','Data'],['category','Categoria'],['description','Descrição'],['supplier','Fornecedor'],['value','Valor']]}
 };
 
@@ -22,6 +22,22 @@ const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function decimalValue(v){
+ let s=String(v??'').trim().replace(/R\$/gi,'').replace(/\s/g,'');
+ if(!s)return 0;
+ if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
+ else if(s.includes(','))s=s.replace(',','.');
+ const n=Number(s);
+ return Number.isFinite(n)?Math.round(n*100)/100:NaN;
+}
+function decimalText(v){return Number(v||0).toFixed(2)}
+function bindDecimalInput(input){
+ if(!input)return;
+ input.addEventListener('blur',()=>{
+  const n=decimalValue(input.value);
+  if(Number.isFinite(n))input.value=decimalText(n);
+ });
+}
 function dateBR(v){if(!v)return '';const p=String(v).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:v}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 function setLoginMessage(msg){$('loginMessage').textContent=msg}
@@ -116,6 +132,11 @@ function renderForm(item={}){
   return;
  }
 
+ if(active==='appointments'){
+  renderAppointmentForm(item);
+  return;
+ }
+
  const m=modules[active];
  editId=item.id??null;
 
@@ -123,11 +144,13 @@ function renderForm(item={}){
   let input='';
   if(type==='select')input=`<select name="${key}" ${required?'required':''}><option value="">Selecione...</option>${opts.map(o=>`<option ${item[key]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
   else if(type==='textarea')input=`<textarea name="${key}" rows="2">${esc(item[key]||'')}</textarea>`;
+  else if(key==='value')input=`<input name="${key}" type="text" inputmode="decimal" ${required?'required':''} value="${esc(item[key]!==undefined?decimalText(item[key]):'')}" placeholder="0,00">`;
   else input=`<input name="${key}" type="${type}" ${required?'required':''} ${type==='number'?'min="0" step="0.01"':''} value="${esc(item[key]??(type==='date'?new Date().toISOString().slice(0,10):''))}" placeholder="${type==='number'?'0,00':''}">`;
   return `<div class="field"><label>${esc(label)}${required?' *':''}</label>${input}</div>`;
  }).join('')}</div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar cadastro'}</button></div></form>`;
 
  $('formWrap').classList.remove('hidden');
+ bindDecimalInput($('recordForm').elements.value);
 
  $('cancelForm').onclick=()=>{
   $('formWrap').classList.add('hidden');
@@ -141,7 +164,7 @@ function renderForm(item={}){
 
   try{
    const data=Object.fromEntries(new FormData(e.target).entries());
-   if('value'in data)data.value=Number(data.value||0);
+   if('value'in data){data.value=decimalValue(data.value);if(!Number.isFinite(data.value)||data.value<0)throw new Error('Informe um valor válido.');}
    if(editId)data.id=editId;
    else data.createdAt=new Date().toISOString();
 
@@ -162,201 +185,199 @@ function renderForm(item={}){
 // Lançamento de serviço iniciado pela placa do veículo.
 function renderServiceForm(item={}){
  editId=item.id??null;
-
  const initialPlate=normalizePlate(item.vehicle||'');
  const initialDate=item.date||new Date().toISOString().slice(0,10);
-
+ const paymentMethods=['Dinheiro','Pix','Cartão','Brinde'];
  $('formWrap').innerHTML=`
   <form id="recordForm">
    <div class="field">
     <label for="servicePlate">Placa do veículo *</label>
-    <input id="servicePlate" name="plate" type="text" required
-     maxlength="8" autocomplete="off" autocapitalize="characters"
-     style="text-transform:uppercase" value="${esc(initialPlate)}"
-     placeholder="Digite a placa">
+    <input id="servicePlate" name="plate" type="text" required maxlength="8"
+     autocomplete="off" autocapitalize="characters" style="text-transform:uppercase"
+     value="${esc(initialPlate)}" placeholder="Digite a placa">
    </div>
-
    <div class="form-actions">
     <button type="button" class="primary" id="findServiceVehicle">Buscar veículo</button>
    </div>
-
-   <div id="serviceVehicleMessage" class="muted small">
-    Informe a placa e toque em “Buscar veículo”.
-   </div>
-
+   <div id="serviceVehicleMessage" class="muted small">Informe a placa e toque em “Buscar veículo”.</div>
    <div id="serviceDetails" class="${item.id?'':'hidden'}">
     <div class="form-grid">
-     <div class="field">
-      <label>Proprietário</label>
-      <input name="client" id="serviceClient" readonly required>
+     <div class="field"><label>Proprietário</label><input name="client" id="serviceClient" readonly required></div>
+     <div class="field"><label>Veículo / placa</label><input name="vehicle" id="serviceVehicle" readonly required></div>
+     <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(initialDate)}"></div>
+     <div class="field"><label>Serviço executado *</label><input name="service" type="text" required value="${esc(item.service||'')}"></div>
+     <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00"></div>
+     <div class="field"><label>Situação *</label><select name="status" id="serviceStatus" required>
+      <option value="">Selecione...</option>${['Em andamento','Concluído','Cancelado'].map(o=>`<option ${item.status===o?'selected':''}>${o}</option>`).join('')}
+     </select></div>
+     <div id="servicePaymentFields" class="form-grid ${item.status==='Concluído'?'':'hidden'}" style="grid-column:1/-1">
+      <div class="field"><label>Situação financeira *</label><select name="paymentStatus" id="servicePaymentStatus">
+       <option value="">Selecione...</option><option value="Recebido" ${item.paymentStatus==='Recebido'?'selected':''}>Recebido</option><option value="Pendente" ${item.paymentStatus==='Pendente'?'selected':''}>Pendente</option>
+      </select></div>
+      <div class="field"><label>Tipo de pagamento *</label><select name="paymentMethod" id="servicePaymentMethod">
+       <option value="">Selecione...</option>${paymentMethods.map(o=>`<option ${item.paymentMethod===o?'selected':''}>${o}</option>`).join('')}
+      </select></div>
      </div>
-     <div class="field">
-      <label>Veículo / placa</label>
-      <input name="vehicle" id="serviceVehicle" readonly required>
-     </div>
-     <div class="field">
-      <label>Data *</label>
-      <input name="date" type="date" required value="${esc(initialDate)}">
-     </div>
-     <div class="field">
-      <label>Serviço executado *</label>
-      <input name="service" type="text" required value="${esc(item.service||'')}">
-     </div>
-     <div class="field">
-      <label>Valor (R$) *</label>
-      <input name="value" type="number" min="0" step="0.01" required
-       value="${esc(item.value??'')}" placeholder="0,00">
-     </div>
-     <div class="field">
-      <label>Situação *</label>
-      <select name="status" required>
-       <option value="">Selecione...</option>
-       ${['Concluído','Em andamento','Cancelado'].map(o=>
-        `<option ${item.status===o?'selected':''}>${o}</option>`
-       ).join('')}
-      </select>
-     </div>
-     <div class="field" style="grid-column:1/-1">
-      <label>Observações</label>
-      <textarea name="notes" rows="2">${esc(item.notes||'')}</textarea>
-     </div>
+     <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
     </div>
     <div id="serviceVehicleInfo" class="muted small"></div>
-    <div class="form-actions">
-     <button type="button" class="secondary" id="cancelForm">Cancelar</button>
-     <button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar serviço'}</button>
-    </div>
+    <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar serviço'}</button></div>
    </div>
   </form>`;
-
  $('formWrap').classList.remove('hidden');
-
- const form=$('recordForm');
- const plateInput=$('servicePlate');
- const details=$('serviceDetails');
- const message=$('serviceVehicleMessage');
+ const form=$('recordForm'), plateInput=$('servicePlate'), details=$('serviceDetails'), message=$('serviceVehicleMessage');
  let matchedVehicle=null;
-
+ bindDecimalInput(form.elements.value);
+ const statusInput=$('serviceStatus');
+ const paymentFields=$('servicePaymentFields');
+ function togglePaymentFields(){
+  const done=statusInput.value==='Concluído';
+  paymentFields.classList.toggle('hidden',!done);
+  $('servicePaymentStatus').required=done;
+  $('servicePaymentMethod').required=done;
+ }
+ if(statusInput)statusInput.addEventListener('change',togglePaymentFields);
+ togglePaymentFields();
  plateInput.addEventListener('input',()=>{
-  const start=plateInput.selectionStart;
-  plateInput.value=normalizePlate(plateInput.value);
+  const start=plateInput.selectionStart; plateInput.value=normalizePlate(plateInput.value);
   try{plateInput.setSelectionRange(start,start)}catch(e){}
-  matchedVehicle=null;
-  details.classList.add('hidden');
+  matchedVehicle=null; details.classList.add('hidden');
   message.textContent='Toque em “Buscar veículo” para localizar o cadastro.';
  });
-
  async function findVehicle(){
-  const plate=normalizePlate(plateInput.value);
-  plateInput.value=plate;
-
-  if(!plate){
-   showToast('Informe a placa do veículo.');
-   plateInput.focus();
-   return;
-  }
-
-  const button=$('findServiceVehicle');
-  button.disabled=true;
-  message.textContent='Buscando veículo na nuvem...';
-
+  const plate=normalizePlate(plateInput.value); plateInput.value=plate;
+  if(!plate){showToast('Informe a placa do veículo.');plateInput.focus();return;}
+  const button=$('findServiceVehicle');button.disabled=true;message.textContent='Buscando veículo na nuvem...';
   try{
-   const [vehicles,clients]=await Promise.all([
-    all('vehicles'),
-    all('clients')
-   ]);
-
+   const [vehicles,clients]=await Promise.all([all('vehicles'),all('clients')]);
    matchedVehicle=vehicles.find(v=>normalizePlate(v.plate)===plate)||null;
-
    if(!matchedVehicle){
-    matchedVehicle=null;
-    details.classList.add('hidden');
-    message.textContent='Veículo não cadastrado.';
-
+    details.classList.add('hidden');message.textContent='Veículo não cadastrado.';
     if(confirm(`A placa ${plate} não está cadastrada. Deseja cadastrar o cliente e o veículo agora?`)){
-     returnToServicesAfterVehicleRegistration=true;
-     editId=null;
-     $('formWrap').classList.add('hidden');
-     active='clients';
-     renderTabs();
-     renderSection();
-     renderClientVehicleForm({plate});
+     returnToServicesAfterVehicleRegistration=true;editId=null;$('formWrap').classList.add('hidden');active='clients';renderTabs();renderSection();renderClientVehicleForm({plate});
     }
     return;
    }
-
-   const client=
-    clients.find(c=>c.id===matchedVehicle.clientId)||
-    clients.find(c=>c.name===matchedVehicle.client)||
-    {name:matchedVehicle.client||''};
-
-   if(!client.name){
-    showToast('O veículo foi localizado, mas não há proprietário vinculado. Verifique o cadastro.');
-    details.classList.add('hidden');
-    return;
-   }
-
-   $('serviceClient').value=client.name;
-   $('serviceVehicle').value=plate;
-   $('serviceVehicleInfo').textContent=[
-    matchedVehicle.brand,
-    matchedVehicle.model,
-    matchedVehicle.type,
-    matchedVehicle.color
-   ].filter(Boolean).join(' • ');
-
-   details.classList.remove('hidden');
-   message.textContent=`Veículo localizado: ${plate}. Dados do cadastro preenchidos.`;
-  }catch(err){
-   matchedVehicle=null;
-   details.classList.add('hidden');
-   message.textContent='Não foi possível consultar a placa. Verifique a conexão.';
-   console.error('Erro ao buscar veículo pela placa:',err);
-  }finally{
-   button.disabled=false;
-  }
+   const client=clients.find(c=>c.id===matchedVehicle.clientId)||clients.find(c=>c.name===matchedVehicle.client)||{name:matchedVehicle.client||''};
+   if(!client.name){showToast('Veículo localizado, mas sem proprietário vinculado. Verifique o cadastro.');details.classList.add('hidden');return;}
+   $('serviceClient').value=client.name;$('serviceVehicle').value=plate;
+   $('serviceVehicleInfo').textContent=[matchedVehicle.brand,matchedVehicle.model,matchedVehicle.type,matchedVehicle.color].filter(Boolean).join(' • ');
+   details.classList.remove('hidden');message.textContent=`Veículo localizado: ${plate}. Dados preenchidos.`;
+  }catch(err){matchedVehicle=null;details.classList.add('hidden');message.textContent='Não foi possível consultar a placa. Verifique a conexão.';console.error('Erro ao buscar veículo pela placa:',err);}
+  finally{button.disabled=false;}
  }
-
  $('findServiceVehicle').onclick=findVehicle;
-
- $('cancelForm').onclick=()=>{
-  $('formWrap').classList.add('hidden');
-  editId=null;
- };
-
- if(item.id){
-  findVehicle();
- }
-
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ if(item.id)findVehicle();
  form.onsubmit=async e=>{
   e.preventDefault();
-
-  if(!matchedVehicle){
-   showToast('Localize um veículo cadastrado antes de salvar o serviço.');
-   return;
-  }
-
-  const submit=form.querySelector('[type=submit]');
-  submit.disabled=true;
-
+  if(!matchedVehicle){showToast('Localize um veículo cadastrado antes de salvar o serviço.');return;}
+  const submit=form.querySelector('[type=submit]');submit.disabled=true;
   try{
    const data=Object.fromEntries(new FormData(form).entries());
-   data.value=Number(data.value||0);
+   data.value=decimalValue(data.value);
+   if(!Number.isFinite(data.value)||data.value<0)throw new Error('Informe um valor válido.');
    data.vehicle=normalizePlate(data.vehicle);
-   if(editId)data.id=editId;
-   else data.createdAt=new Date().toISOString();
+   if(data.status==='Concluído'){
+    if(!data.paymentStatus||!data.paymentMethod)throw new Error('Informe se foi recebido ou pendente e o tipo de pagamento.');
+   }else{delete data.paymentStatus;delete data.paymentMethod;}
+   if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
+   const saved=await save('services',data);
+   if(saved.status==='Concluído')await syncServicePayment(saved);
+   else await cancelLinkedServicePayment(saved.id);
+   $('formWrap').classList.add('hidden');editId=null;showToast('Serviço salvo na nuvem.');
+   await renderTable();await renderStats();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
+  finally{submit.disabled=false;}
+ };
+}
 
-   await save('services',data);
-   $('formWrap').classList.add('hidden');
-   editId=null;
-   showToast('Serviço salvo na nuvem.');
-   await renderTable();
-   await renderStats();
-  }catch(err){
-   showToast('Não foi possível salvar o serviço: '+(err.message||'verifique a conexão.'));
-  }finally{
-   submit.disabled=false;
-  }
+async function syncServicePayment(service){
+ const payments=await all('payments');
+ const existing=payments.find(p=>p.serviceId===service.id);
+ const method=service.paymentMethod||'';
+ const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?'Pago':'Pendente';
+ const payment={
+  ...(existing?{id:existing.id}:{}),
+  serviceId:service.id,date:service.date,client:service.client,
+  description:`Serviço ${service.service||''} - ${service.vehicle||''}`,
+  method,value:Number(service.value||0),status,
+  notes:service.notes||''
+ };
+ await save('payments',payment);
+}
+
+async function cancelLinkedServicePayment(serviceId){
+ const payments=await all('payments');
+ const linked=payments.find(p=>p.serviceId===serviceId);
+ if(linked){linked.status='Estornado';await save('payments',linked);}
+}
+
+async function renderAppointmentForm(item={}){
+ editId=item.id??null;
+ let linkedService=null;
+ if(item.id){
+  try{linkedService=(await all('services')).find(s=>s.appointmentId===item.id)||null;}
+  catch(err){console.error('Não foi possível localizar serviço vinculado:',err);}
+ }
+ const initialStatus=item.status||'Agendado';
+ $('formWrap').innerHTML=`
+  <form id="recordForm">
+   <div class="form-grid">
+    <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(item.date||new Date().toISOString().slice(0,10))}"></div>
+    <div class="field"><label>Horário *</label><input name="time" type="time" required value="${esc(item.time||'')}"></div>
+    <div class="field"><label>Cliente *</label><input name="client" type="text" required value="${esc(item.client||'')}"></div>
+    <div class="field"><label>Veículo / placa *</label><input name="vehicle" type="text" required value="${esc(item.vehicle||'')}" style="text-transform:uppercase" autocapitalize="characters"></div>
+    <div class="field"><label>Serviço solicitado *</label><input name="service" type="text" required value="${esc(item.service||'')}"></div>
+    <div class="field"><label>Situação *</label><select name="status" id="appointmentStatus" required>
+     ${['Agendado','Confirmado','Concluído','Cancelado'].map(o=>`<option ${initialStatus===o?'selected':''}>${o}</option>`).join('')}
+    </select></div>
+    <div id="appointmentValueField" class="field ${initialStatus==='Confirmado'?'':'hidden'}" style="grid-column:1/-1">
+     <label>Valor combinado (R$) *</label><input name="value" id="appointmentValue" type="text" inputmode="decimal" value="${esc(linkedService?decimalText(linkedService.value):item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00" ${initialStatus==='Confirmado'?'required':''}>
+     <small>Ao salvar como Confirmado, o serviço será criado automaticamente em Serviços, com situação Em andamento.</small>
+    </div>
+    <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
+   </div>
+   <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar agendamento'}</button></div>
+  </form>`;
+ $('formWrap').classList.remove('hidden');
+ const form=$('recordForm'), statusField=$('appointmentStatus'), valueField=$('appointmentValueField'), valueInput=$('appointmentValue');
+ bindDecimalInput(valueInput);
+ statusField.onchange=()=>{
+  const confirmed=statusField.value==='Confirmado';
+  valueField.classList.toggle('hidden',!confirmed);valueInput.required=confirmed;
+ };
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ form.onsubmit=async e=>{
+  e.preventDefault();const submit=form.querySelector('[type=submit]');submit.disabled=true;
+  try{
+   const data=Object.fromEntries(new FormData(form).entries());
+   data.vehicle=normalizePlate(data.vehicle);
+   if(data.status==='Confirmado'){
+    data.value=decimalValue(data.value);
+    if(!Number.isFinite(data.value)||data.value<0)throw new Error('Informe um valor válido para confirmar o serviço.');
+   }else delete data.value;
+   if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
+   const savedAppointment=await save('appointments',data);
+   if(savedAppointment.status==='Confirmado'){
+    const services=await all('services');
+    const existing=services.find(s=>s.appointmentId===savedAppointment.id)||null;
+    const serviceData={
+     ...(existing?{id:existing.id}:{}),appointmentId:savedAppointment.id,
+     date:savedAppointment.date,client:savedAppointment.client,
+     vehicle:normalizePlate(savedAppointment.vehicle),service:savedAppointment.service,
+     value:Number(savedAppointment.value||0),status:existing?.status==='Concluído'?'Concluído':'Em andamento',
+     notes:savedAppointment.notes||existing?.notes||'',
+     ...(existing?.paymentStatus?{paymentStatus:existing.paymentStatus}:{}),
+     ...(existing?.paymentMethod?{paymentMethod:existing.paymentMethod}:{})
+    };
+    const savedService=await save('services',serviceData);
+    if(savedService.status==='Concluído')await syncServicePayment(savedService);
+    showToast(existing?'Serviço vinculado atualizado.':'Agendamento confirmado e serviço criado em Serviços.');
+   }else showToast('Agendamento salvo na nuvem.');
+   $('formWrap').classList.add('hidden');editId=null;await renderTable();await renderStats();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
+  finally{submit.disabled=false;}
  };
 }
 
@@ -704,6 +725,7 @@ async function renderTable(){
    b.onclick=async()=>{
     if(confirm('Deseja realmente excluir este registro da nuvem?')){
      try{
+      if(active==='services')await cancelLinkedServicePayment(b.dataset.delete);
       await remove(m.store,b.dataset.delete);
       showToast('Registro excluído.');
       await renderTable();
@@ -868,12 +890,14 @@ async function renderDashboards(){
   }
 
   const monthly=months.map(m=>{
-   const revenue=payments
-    .filter(p=>
-     p.status==='Pago' &&
-     p.date &&
-     p.date.slice(0,7)===m.key
-    )
+   const revenue=services
+    .filter(s=>s.status==='Concluído' && s.date && s.date.slice(0,7)===m.key)
+    .reduce((sum,s)=>sum+Number(s.value||0),0)
+    +payments.filter(p=>!p.serviceId && p.status==='Pago' && p.date && p.date.slice(0,7)===m.key)
+     .reduce((sum,p)=>sum+Number(p.value||0),0);
+   const received=payments.filter(p=>p.status==='Pago' && p.date && p.date.slice(0,7)===m.key)
+    .reduce((sum,p)=>sum+Number(p.value||0),0);
+   const pending=payments.filter(p=>p.status==='Pendente' && p.date && p.date.slice(0,7)===m.key)
     .reduce((sum,p)=>sum+Number(p.value||0),0);
 
    const spent=expenses
@@ -892,6 +916,8 @@ async function renderDashboards(){
    return {
     ...m,
     revenue,
+    received,
+    pending,
     spent,
     balance:revenue-spent,
     completed
@@ -915,6 +941,18 @@ async function renderDashboards(){
      current.revenue,previous.revenue
     ),
     description:'Comparado ao mês anterior'
+   },
+   {
+    label:'Recebido no mês',
+    value:money(current.received),
+    variation:'',
+    description:'Pagamentos efetivamente recebidos'
+   },
+   {
+    label:'Valores pendentes',
+    value:money(current.pending),
+    variation:'',
+    description:'Serviços ainda não recebidos'
    },
    {
     label:'Despesas do mês',
@@ -988,7 +1026,7 @@ async function renderDashboards(){
      <div class="dashboard-chart-head">
       <div>
        <h3>Evolução financeira</h3>
-       <p>Faturamento recebido e despesas registradas</p>
+       <p>Receita de serviços concluídos e despesas registradas</p>
       </div>
 
       <select id="dashboardChartRange"
@@ -1159,8 +1197,18 @@ async function renderStats(){
   ).length;
 
   // Somente pagamentos efetivamente recebidos.
-  const paid=periodPayments
+  const serviceRevenue=periodServices
+   .filter(s=>s.status==='Concluído')
+   .reduce((s,p)=>s+Number(p.value||0),0);
+  const legacyPaid=periodPayments
+   .filter(p=>p.status==='Pago'&&!p.serviceId)
+   .reduce((s,p)=>s+Number(p.value||0),0);
+  const paid=serviceRevenue+legacyPaid;
+  const received=periodPayments
    .filter(p=>p.status==='Pago')
+   .reduce((s,p)=>s+Number(p.value||0),0);
+  const pending=periodPayments
+   .filter(p=>p.status==='Pendente')
    .reduce((s,p)=>s+Number(p.value||0),0);
 
   const spent=periodExpenses
@@ -1178,9 +1226,11 @@ async function renderStats(){
 
   const stats=[
    ['Serviços concluídos',completed],
-   ['Faturamento',money(paid)],
+   ['Receita de serviços',money(paid)],
+   ['Recebido',money(received)],
+   ['Valores pendentes',money(pending)],
    ['Despesas',money(spent)],
-   ['Saldo',money(paid-spent)],
+   ['Saldo disponível',money(received-spent)],
    ['Agendamentos',scheduled],
    ['Clientes cadastrados',clients.length],
    ['Veículos cadastrados',vehicles.length]
@@ -1188,6 +1238,7 @@ async function renderStats(){
 
   $('stats').innerHTML=`
    <div style="grid-column:1/-1;margin-bottom:12px">
+    <button type="button" class="primary" id="dailyCloseBtn" style="width:100%;margin-bottom:12px">Fechamento do dia</button>
     <label for="dashboardPeriodSelect"
      style="display:block;margin-bottom:6px;font-weight:600">
      Período do painel
@@ -1215,6 +1266,7 @@ async function renderStats(){
    `).join('')}
   `;
 
+  $('dailyCloseBtn').onclick=()=>renderDailyClose();
   const selector=$('dashboardPeriodSelect');
 
   selector.value=dashboardPeriod;
@@ -1227,6 +1279,38 @@ async function renderStats(){
  }catch(e){
   console.error('Erro ao atualizar painel:',e);
  }
+}
+
+async function renderDailyClose(){
+ const date=prompt('Informe a data do fechamento (AAAA-MM-DD):',new Date().toISOString().slice(0,10));
+ if(date===null)return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){showToast('Data inválida. Use AAAA-MM-DD.');return;}
+ try{
+  const [services,payments]=await Promise.all([all('services'),all('payments')]);
+  const completed=services.filter(s=>s.date===date&&s.status==='Concluído');
+  const received=payments.filter(p=>p.date===date&&p.status==='Pago');
+  const pending=payments.filter(p=>p.date===date&&p.status==='Pendente');
+  const gifts=payments.filter(p=>p.date===date&&p.status==='Brinde');
+  const totalServices=completed.reduce((n,s)=>n+Number(s.value||0),0);
+  const totalReceived=received.reduce((n,p)=>n+Number(p.value||0),0);
+  const totalPending=pending.reduce((n,p)=>n+Number(p.value||0),0);
+  const totalGifts=gifts.reduce((n,p)=>n+Number(p.value||0),0);
+  $('tableWrap').innerHTML=`
+   <div class="dashboard-chart-panel">
+    <div class="dashboard-chart-head"><div><h3>Fechamento do dia</h3><p>${dateBR(date)}</p></div><button class="secondary" id="backDashboard">Voltar ao painel</button></div>
+    <div class="dashboard-metrics">
+     <div class="dashboard-metric"><span>Serviços concluídos</span><strong>${completed.length}</strong></div>
+     <div class="dashboard-metric"><span>Valor dos serviços</span><strong>${money(totalServices)}</strong></div>
+     <div class="dashboard-metric"><span>Recebido</span><strong>${money(totalReceived)}</strong></div>
+     <div class="dashboard-metric"><span>Pendente</span><strong>${money(totalPending)}</strong></div>
+     <div class="dashboard-metric"><span>Brindes</span><strong>${money(totalGifts)}</strong></div>
+    </div>
+    <h3>Serviços concluídos</h3>
+    ${completed.length?`<div class="table-scroll"><table><thead><tr><th>Cliente</th><th>Placa</th><th>Serviço</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>${completed.map(s=>`<tr><td>${esc(s.client||'')}</td><td>${esc(s.vehicle||'')}</td><td>${esc(s.service||'')}</td><td>${money(s.value)}</td><td>${esc(s.paymentMethod||'—')} / ${esc(s.paymentStatus||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum serviço concluído nesta data.</p>'}
+    <p class="dashboard-footnote">Recebido considera somente pagamentos com situação Pago. Pendentes e brindes aparecem separados e não entram no total recebido.</p>
+   </div>`;
+  $('backDashboard').onclick=()=>renderDashboards();
+ }catch(err){showToast('Não foi possível gerar o fechamento: '+err.message);}
 }
 
 async function exportExcel(){
