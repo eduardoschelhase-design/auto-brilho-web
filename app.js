@@ -843,7 +843,7 @@ async function renderDashboards(){
     Não foi possível carregar os dashboards.
     Verifique sua conexão e tente atualizar.
    </div>
-  }
+  `;
  }
 }
 
