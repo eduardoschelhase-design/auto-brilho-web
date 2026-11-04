@@ -38,9 +38,21 @@ async function init(){
  setLoginMessage('DIAGNÓSTICO: INIT INICIADO');
  recoveryMode=recoveryLinkPresent();
 
- if(!window.sbClient||!configured()){
+ if(!window.supabase || !configured()){
   showApp(false);
-  setLoginMessage('Antes de entrar, configure a URL e a chave pública do sbClient no arquivo config.js. Veja o README.');
+
+  if(!window.supabase){
+    setLoginMessage('ERRO: biblioteca Supabase não carregada.');
+  }else if(!window.AUTO_BRILHO_CONFIG){
+    setLoginMessage('ERRO: AUTO_BRILHO_CONFIG não encontrado.');
+  }else if(!window.AUTO_BRILHO_CONFIG.supabaseUrl){
+    setLoginMessage('ERRO: URL do Supabase ausente.');
+  }else if(!window.AUTO_BRILHO_CONFIG.supabaseAnonKey){
+    setLoginMessage('ERRO: chave pública ausente.');
+  }else{
+    setLoginMessage('ERRO: URL ou chave com formato inválido.');
+  }
+ 
   $('loginForm').onsubmit=e=>{
    e.preventDefault();
    setLoginMessage('Configuração pendente: complete config.js e publique novamente.');
