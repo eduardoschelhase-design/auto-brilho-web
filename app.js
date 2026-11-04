@@ -453,37 +453,155 @@ async function renderTable(){
 }
 
 async function renderStats(){
+
+async function renderStats(){
  try{
   const [clients,vehicles,services,appointments,payments,expenses]=
-   await Promise.all(
-    Object.values(modules).map(m=>all(m.store))
-   );
+   await Promise.all([
+    all('clients'),
+    all('vehicles'),
+    all('services'),
+    all('appointments'),
+    all('payments'),
+    all('expenses')
+   ]);
 
-  const paid=payments
+  // Data local, sem depender do fuso UTC.
+  const now=new Date();
+  const currentMonth=
+   now.getFullYear()+'-'+
+   String(now.getMonth()+1).padStart(2,'0');
+
+  // Descobre o primeiro mês com registros.
+  const datedRecords=[
+   ...services,
+   ...appointments,
+   ...payments,
+   ...expenses
+  ].map(r=>r.date)
+   .filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d))
+   .sort();
+
+  const firstMonth=datedRecords.length
+   ?datedRecords[0].slice(0,7)
+   :currentMonth;
+
+  // Monta a lista de meses disponíveis até o atual.
+  const months=[];
+  const start=new Date(
+   Number(firstMonth.slice(0,4)),
+   Number(firstMonth.slice(5,7))-1,
+   1
+  );
+
+  const end=new Date(
+   now.getFullYear(),
+   now.getMonth(),
+   1
+  );
+
+  for(let d=new Date(start);d<=end;d.setMonth(d.getMonth()+1)){
+   const key=
+    d.getFullYear()+'-'+
+    String(d.getMonth()+1).padStart(2,'0');
+
+   months.push({
+    key,
+    label:d.toLocaleDateString('pt-BR',{
+     month:'long',
+     year:'numeric'
+    })
+   });
+  }
+
+  // Aplica o período selecionado.
+  const inPeriod=r=>{
+   if(dashboardPeriod==='all')return true;
+   if(!r.date)return false;
+   if(dashboardPeriod==='current'){
+    return r.date.slice(0,7)===currentMonth;
+   }
+   return r.date.slice(0,7)===dashboardPeriod;
+  };
+
+  const periodServices=services.filter(inPeriod);
+  const periodAppointments=appointments.filter(inPeriod);
+  const periodPayments=payments.filter(inPeriod);
+  const periodExpenses=expenses.filter(inPeriod);
+
+  // Somente serviços concluídos.
+  const completed=periodServices.filter(
+   s=>s.status==='Concluído'
+  ).length;
+
+  // Somente pagamentos efetivamente recebidos.
+  const paid=periodPayments
    .filter(p=>p.status==='Pago')
    .reduce((s,p)=>s+Number(p.value||0),0);
 
-  const spent=expenses
+  const spent=periodExpenses
    .reduce((s,p)=>s+Number(p.value||0),0);
 
+  const scheduled=periodAppointments.filter(a=>
+   ['Agendado','Confirmado'].includes(a.status)
+  ).length;
+
+  const periodLabel=dashboardPeriod==='all'
+   ?'Todos os períodos'
+   :dashboardPeriod==='current'
+    ?'Mês atual'
+    :(months.find(m=>m.key===dashboardPeriod)?.label||'Mês selecionado');
+
   const stats=[
-   ['Clientes',clients.length],
-   ['Veículos',vehicles.length],
-   ['Agendamentos',appointments.filter(a=>
-    ['Agendado','Confirmado'].includes(a.status)
-   ).length],
-   ['Saldo registrado',money(paid-spent)]
+   ['Serviços concluídos',completed],
+   ['Faturamento',money(paid)],
+   ['Despesas',money(spent)],
+   ['Saldo',money(paid-spent)],
+   ['Agendamentos',scheduled],
+   ['Clientes cadastrados',clients.length],
+   ['Veículos cadastrados',vehicles.length]
   ];
 
-  $('stats').innerHTML=stats.map(([l,v])=>
-   `<div class="stat">
-    <div class="label">${l}</div>
-    <div class="value">${v}</div>
-   </div>`
-  ).join('');
+  $('stats').innerHTML=`
+   <div style="grid-column:1/-1;margin-bottom:12px">
+    <label for="dashboardPeriodSelect"
+     style="display:block;margin-bottom:6px;font-weight:600">
+     Período do painel
+    </label>
+
+    <select id="dashboardPeriodSelect"
+     style="width:100%;padding:12px;border-radius:8px">
+     <option value="current">Mês atual</option>
+     <option value="all">Todos os períodos</option>
+     ${months.slice().reverse().map(m=>
+      `<option value="${m.key}">${m.label}</option>`
+     ).join('')}
+    </select>
+
+    <small style="display:block;margin-top:6px;opacity:.7">
+     Exibindo: ${esc(periodLabel)}
+    </small>
+   </div>
+
+   ${stats.map(([label,value])=>`
+    <div class="stat">
+     <div class="label">${esc(label)}</div>
+     <div class="value">${esc(value)}</div>
+    </div>
+   `).join('')}
+  `;
+
+  const selector=$('dashboardPeriodSelect');
+
+  selector.value=dashboardPeriod;
+
+  selector.onchange=()=>{
+   dashboardPeriod=selector.value;
+   renderStats();
+  };
 
  }catch(e){
-  console.error(e);
+  console.error('Erro ao atualizar painel:',e);
  }
 }
 
