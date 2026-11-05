@@ -1505,12 +1505,19 @@ function subscribeRealtime(){
   .subscribe();
 }
 
+let appEntering=false;
 async function enterApp(){
- showApp(true);
- renderTabs();
- renderSection();
- await renderStats();
- subscribeRealtime();
+ if(appEntering)return;
+ appEntering=true;
+ try{
+  showApp(true);
+  renderTabs();
+  renderSection();
+  await renderStats();
+  subscribeRealtime();
+ }finally{
+  appEntering=false;
+ }
 }
 
 function recoveryLinkPresent(){
@@ -1582,6 +1589,8 @@ async function init(){
       realtimeChannel=null;
      }
      showApp(false);
+     $('loginPassword').value='';
+     if(event==='SIGNED_OUT')setLoginMessage('Sessão encerrada. Entre novamente para continuar.');
     }
    }catch(err){
     console.error('Erro ao abrir painel:',err);
@@ -1590,6 +1599,30 @@ async function init(){
    }
   },0);
  });
+
+ $('logoutBtn').onclick=async()=>{
+  const btn=$('logoutBtn');
+  btn.disabled=true;
+  btn.textContent='Saindo...';
+  setLoginMessage('Encerrando sua sessão...');
+  try{
+   const {error}=await sbClient.auth.signOut({scope:'local'});
+   if(error)throw error;
+   if(realtimeChannel){
+    await sbClient.removeChannel(realtimeChannel);
+    realtimeChannel=null;
+   }
+   $('loginPassword').value='';
+   showApp(false);
+   setLoginMessage('Sessão encerrada. Informe seu e-mail e senha para entrar novamente.');
+  }catch(err){
+   console.error('Erro ao encerrar sessão:',err);
+   setLoginMessage('Não foi possível encerrar a sessão: '+(err.message||'tente novamente.'));
+  }finally{
+   btn.disabled=false;
+   btn.textContent='Sair';
+  }
+ };
 
  $('loginForm').onsubmit=async e=>{
   e.preventDefault();
