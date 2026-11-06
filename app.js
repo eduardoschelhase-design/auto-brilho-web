@@ -5,14 +5,14 @@ const DB_NAME='AutoBrilhoDB', DB_VERSION=1;
 
 const modules={
  clients:{label:'Clientes',singular:'cliente',icon:'♙',store:'clients',fields:[['name','Nome completo','text',true],['phone','Telefone / WhatsApp','tel',false],['email','E-mail','email',false],['document','CPF / CNPJ','text',false],['address','Endereço','text',false],['notes','Observações','textarea',false]],columns:[['name','Nome'],['phone','Telefone'],['document','CPF / CNPJ']]},
- vehicles:{label:'Veículos',singular:'veículo',icon:'🚗',store:'vehicles',fields:[['client','Cliente','text',true],['plate','Placa','text',true],['type','Tipo de veículo','select',true,['Carro','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],['brand','Marca','text',false],['model','Modelo','text',false],['color','Cor','text',false],['notes','Observações','textarea',false]],columns:[['plate','Placa'],['client','Cliente'],['type','Tipo'],['model','Modelo']]},
+ vehicles:{label:'Veículos',singular:'veículo',icon:'🚗',store:'vehicles',fields:[['client','Cliente','text',true],['plate','Placa','text',true],['type','Tipo de veículo','select',true,['Carro','SUV','Utilitário','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],['brand','Marca','text',false],['model','Modelo','text',false],['color','Cor','text',false],['notes','Observações','textarea',false]],columns:[['plate','Placa'],['client','Cliente'],['type','Tipo'],['model','Modelo']]},
  services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Concluído','Em andamento','Cancelado']],['paymentStatus','Situação financeira','select',false,['Recebido','Pendente']],['paymentMethod','Tipo de pagamento','select',false,['Dinheiro','Pix','Cartão','Brinde']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]},
  appointments:{label:'Agendamentos',singular:'agendamento',icon:'▦',store:'appointments',fields:[['date','Data','date',true],['time','Horário','time',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço solicitado','text',true],['value','Valor (R$)','number',false],['status','Situação','select',true,['Agendado','Confirmado','Concluído','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]},
  payments:{label:'Receitas e pagamentos',singular:'pagamento',icon:'R$',store:'payments',fields:[['date','Data','date',true],['client','Cliente','text',true],['description','Descrição','text',true],['method','Forma de pagamento','select',true,['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Brinde','Outro']],['value','Valor (R$)','number',true],['status','Situação','select',true,['Pago','Pendente','Brinde','Estornado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]},
  expenses:{label:'Despesas',singular:'despesa',icon:'−',store:'expenses',fields:[['date','Data do pagamento','date',false],['dueDate','Data de vencimento','date',false],['category','Categoria','select',false,['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo']],['subcategory','Subcategoria','text',false],['description','Descrição','text',true],['supplier','Fornecedor','text',false],['value','Valor (R$)','number',true],['payment','Forma de pagamento','select',false,['Pix','Dinheiro','Cartão','Transferência','Débito automático','Outro']],['paymentStatus','Situação','select',false,['Em aberto','Pago']],['notes','Observações','textarea',false]],columns:[['date','Data'],['category','Categoria'],['subcategory','Subcategoria'],['description','Descrição'],['value','Valor']]}
 };
 
-let sbClient, active='clients', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
+let sbClient, active='home', editId=null, installPrompt=null, realtimeChannel=null, recoveryMode=false, editingVehicleId=null;
 let dashboardPeriod='current';
 let dashboardChartRange=12;
 let returnToServicesAfterVehicleRegistration=false;
@@ -264,13 +264,14 @@ async function renderPayablesTable(){
    try{
     const paidDate=localISODate();
     await save('expenses',{...r,paymentStatus:'Pago',payment:allowed,date:paidDate,paidAt:paidDate});
+    await closeDueNotificationsIfClear();
     showToast('Pagamento confirmado e lançado em Despesas.');
     await renderTable();await renderStats();
    }catch(err){showToast('Erro ao confirmar pagamento: '+err.message);}
   });
   $('tableWrap').querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
    if(!confirm('Excluir esta conta a pagar?'))return;
-   try{await remove('expenses',b.dataset.delete);showToast('Conta excluída.');await renderTable();await renderStats();}
+   try{await remove('expenses',b.dataset.delete);await closeDueNotificationsIfClear();showToast('Conta excluída.');await renderTable();await renderStats();}
    catch(err){showToast('Erro ao excluir: '+err.message);}
   });
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar as contas a pagar. Verifique a conexão.</div>';console.error(err);}
@@ -299,7 +300,7 @@ function renderServiceForm(item={}){
      <div class="field"><label>Proprietário</label><input name="client" id="serviceClient" readonly required></div>
      <div class="field"><label>Veículo / placa</label><input name="vehicle" id="serviceVehicle" readonly required></div>
      <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(initialDate)}"></div>
-     <div class="field"><label>Serviço executado *</label><input name="service" type="text" required value="${esc(item.service||'')}"></div>
+     <div class="field"><label>Serviço executado *</label><input name="service" type="text" list="serviceOptions" required value="${esc(item.service||'')}"><datalist id="serviceOptions"><option value="Lavagem simples"><option value="Ducha"><option value="Lavagem completa"><option value="Limpeza interna"></datalist></div>
      <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00"></div>
      <div class="field"><label>Situação *</label><select name="status" id="serviceStatus" required>
       <option value="">Selecione...</option>${['Em andamento','Concluído','Cancelado'].map(o=>`<option ${item.status===o?'selected':''}>${o}</option>`).join('')}
@@ -362,7 +363,7 @@ function renderServiceForm(item={}){
  }
  $('findServiceVehicle').onclick=findVehicle;
  $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
- if(item.id)findVehicle();
+ if(item.id&&/^AAA[0-9]{4}$/.test(initialPlate)){matchedVehicle={plate:initialPlate,client:item.client||''};$('serviceClient').value=item.client||'';$('serviceVehicle').value=initialPlate;$('serviceVehicleInfo').textContent='Registro histórico: placa não anotada no atendimento. Não há veículo cadastrado para esta identificação.';details.classList.remove('hidden');message.textContent='Serviço histórico sem placa real; o registro será preservado.';}else if(item.id||initialPlate)findVehicle();
  form.onsubmit=async e=>{
   e.preventDefault();
   if(!matchedVehicle){showToast('Localize um veículo cadastrado antes de salvar o serviço.');return;}
@@ -422,7 +423,7 @@ async function renderAppointmentForm(item={}){
     <div class="field"><label>Horário *</label><input name="time" type="time" required value="${esc(item.time||'')}"></div>
     <div class="field"><label>Cliente *</label><input name="client" type="text" required value="${esc(item.client||'')}"></div>
     <div class="field"><label>Veículo / placa *</label><input name="vehicle" type="text" required value="${esc(item.vehicle||'')}" style="text-transform:uppercase" autocapitalize="characters"></div>
-    <div class="field"><label>Serviço solicitado *</label><input name="service" type="text" required value="${esc(item.service||'')}"></div>
+    <div class="field"><label>Serviço solicitado *</label><input name="service" type="text" list="serviceOptions" required value="${esc(item.service||'')}"><datalist id="serviceOptions"><option value="Lavagem simples"><option value="Ducha"><option value="Lavagem completa"><option value="Limpeza interna"></datalist></div>
     <div class="field"><label>Situação *</label><select name="status" id="appointmentStatus" required>
      ${['Agendado','Confirmado','Concluído','Cancelado'].map(o=>`<option ${initialStatus===o?'selected':''}>${o}</option>`).join('')}
     </select></div>
@@ -487,6 +488,7 @@ function renderClientVehicleForm(vehicle={}){
  const clientFields=[
   ['name','Nome completo','text',true],
   ['phone','Telefone / WhatsApp','tel',false],
+  ['registrationDate','Data de cadastramento','date',false],
   ['email','E-mail','email',false],
   ['document','CPF / CNPJ','text',false],
   ['address','Endereço','text',false],
@@ -495,7 +497,7 @@ function renderClientVehicleForm(vehicle={}){
 
  const vehicleFields=[
   ['plate','Placa','text',true],
-  ['type','Tipo de veículo','select',true,['Carro','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],
+  ['type','Tipo de veículo','select',true,['Carro','SUV','Utilitário','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],
   ['brand','Marca','text',false],
   ['model','Modelo','text',false],
   ['color','Cor','text',false],
@@ -509,6 +511,7 @@ function renderClientVehicleForm(vehicle={}){
    key==='clientNotes'?(currentClient.notes||''):
    key==='vehicleNotes'?(vehicle.notes||''):
    key==='name'?(currentClient.name||vehicle.client||''):
+   key==='registrationDate'?(currentClient.registrationDate||(vehicle.clientId?'':localISODate())):
    key==='plate'?(vehicle.plate||''):
    currentClient[key]??vehicle[key]??'';
 
@@ -630,6 +633,7 @@ function renderClientVehicleForm(vehicle={}){
    const clientData={
     name:d.name.trim(),
     phone:d.phone,
+    registrationDate:d.registrationDate||currentClient.registrationDate||'',
     email:d.email,
     document:d.document,
     address:d.address,
@@ -1415,7 +1419,7 @@ async function renderDailyClose(){
     ${expenses.length?`<div class="table-scroll"><table><thead><tr><th>Categoria</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>${expenses.map(e=>`<tr><td>${esc(e.category||'')}</td><td>${esc(e.description||'')}</td><td>${money(e.value)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhuma despesa paga nesta data.</p>'}
     <p class="dashboard-footnote">Somente despesas efetivamente pagas entram no fechamento. Contas em aberto aparecem separadamente e não reduzem o saldo do dia.</p>
    </div>`;
-  $('backDashboard').onclick=()=>renderDashboards();
+  $('backDashboard').onclick=()=>active==='home'?renderHomePanel():renderDashboards();
  }catch(err){showToast('Não foi possível gerar o fechamento: '+err.message);}
 }
 
@@ -1475,6 +1479,7 @@ async function backupJSON(){
   for(const [key,m] of Object.entries(modules)){
    backup.data[key]=await all(m.store);
   }
+  backup.data.settings=typeof getLocalSettings==='function'?getLocalSettings():{};
 
   const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1493,16 +1498,9 @@ showToast('Backup gerado com sucesso.');
 }
 function subscribeRealtime(){
  if(realtimeChannel)sbClient.removeChannel(realtimeChannel);
-
- realtimeChannel=sbClient.channel('auto-brilho-sync')
-  .on('postgres_changes',{
-   event:'*',
-   schema:'public'
-  },()=>{
-   renderTable();
-   renderStats();
-  })
-  .subscribe();
+ realtimeChannel=sbClient.channel('auto-brilho-sync').on('postgres_changes',{event:'*',schema:'public'},()=>{
+  if(active==='home')renderHomePanel();else if(active==='dashboard')renderDashboards();else if(active==='reports')renderFinancialMovement();else if(active==='pending')renderPendingPaymentsTable();else renderTable();renderStats();
+ }).subscribe();
 }
 
 let appEntering=false;
@@ -1712,17 +1710,215 @@ async function init(){
  };
 }
 
+
+/* ===== CAMADA DE MELHORIAS AUTO BRILHO v8 ===== */
+let stagedExcelImport=null;
+const originalRenderClientVehicleForm=renderClientVehicleForm;
+const originalRenderClientVehicleTable=renderClientVehicleTable;
+const originalRenderTabs=renderTabs;
+const originalRenderSection=renderSection;
+const originalRenderDashboards=renderDashboards;
+const originalRenderStats=renderStats;
+
+function normalizeText(v){return String(v??'').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ')}
+function sameClient(a,b){return normalizeText(a)===normalizeText(b)}
+function selectedVehicleForClient(client,vehicles){
+ const list=vehicles.filter(v=>v.clientId===client.id||sameClient(v.client,client.name));
+ if(!list.length)return null;
+ if(list.length===1)return list[0];
+ const answer=prompt('Escolha o veículo digitando o número:\n'+list.map((v,i)=>`${i+1} - ${normalizePlate(v.plate)} (${[v.brand,v.model,v.type].filter(Boolean).join(' ')})`).join('\n'));
+ if(answer===null)return null;
+ const n=Number(answer);
+ return Number.isInteger(n)&&n>=1&&n<=list.length?list[n-1]:null;
+}
+
+renderTabs=function(){
+ const tabs=[
+  ['home','⌂','Início'],['dashboard','▥','Dashboards'],['clients','♙','Cadastro'],['services','✦','Serviços'],
+  ['appointments','▦','Agendamentos'],['payments','R$','Pagamentos'],['pending','◷','Pendentes'],
+  ['expenses','−','Despesas'],['payables','◷','Contas a pagar'],['reports','▤','Relatórios']
+ ];
+ $('tabs').innerHTML=tabs.map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
+ $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
+  active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap').classList.add('hidden');renderTabs();renderSection();
+ });
+};
+
+renderSection=function(){
+ const reports=active==='reports',home=active==='home',dashboard=active==='dashboard';
+ $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
+ $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
+ if(reports){$('sectionTitle').textContent='Relatórios e importação';$('exportStatus').textContent='';renderFinancialMovement();return;}
+ const special=home||dashboard||active==='pending';
+ $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
+ $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':modules[active]?.label||'Gestão';
+ $('addBtn').classList.toggle('hidden',special);$('formWrap').classList.add('hidden');
+ $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
+ $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':'+ Novo '+(modules[active]?.singular||'registro');
+ $('searchInput').value='';
+ if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
+};
+
+async function renderHomePanel(){
+ try{const [appointments,services,payments,expenses]=await Promise.all([all('appointments'),all('services'),all('payments'),all('expenses')]);const today=localISODate();const next=appointments.filter(a=>a.date>=today&&['Agendado','Confirmado'].includes(a.status)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,6);const due=expenses.filter(isDueAlert);const todayServices=services.filter(s=>s.date===today&&s.status==='Concluído');const todayReceived=payments.filter(p=>p.date===today&&p.status==='Pago').reduce((n,p)=>n+Number(p.value||0),0);
+ $('tableWrap').innerHTML=`<div class="home-quick-actions"><button class="primary" data-home-action="services">+ Novo serviço</button><button class="secondary" data-home-action="appointments">+ Agendamento</button><button class="secondary" data-home-action="pending">Pagamentos pendentes</button><button class="secondary" data-home-action="payables">Contas a pagar</button><button class="secondary" data-home-action="reports">Relatórios</button></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Serviços concluídos hoje</span><strong>${todayServices.length}</strong></div><div class="dashboard-metric"><span>Recebido hoje</span><strong>${money(todayReceived)}</strong></div><div class="dashboard-metric"><span>Agendamentos futuros</span><strong>${appointments.filter(a=>a.date>=today&&['Agendado','Confirmado'].includes(a.status)).length}</strong></div><div class="dashboard-metric"><span>Contas a vencer / atrasadas</span><strong>${due.length}</strong></div></div>${due.length?`<div class="alert-panel"><strong>Contas próximas do vencimento ou vencidas</strong>${due.map(e=>`<p>${dateBR(e.dueDate)} · ${esc(e.description)} · ${money(e.value)}</p>`).join('')}</div>`:''}<div class="dashboard-chart-panel"><h3>Próximos agendamentos</h3>${next.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Cliente</th><th>Veículo</th><th>Serviço</th><th>Situação</th></tr></thead><tbody>${next.map(a=>`<tr><td>${dateBR(a.date)}</td><td>${esc(a.time||'')}</td><td>${esc(a.client)}</td><td>${esc(a.vehicle)}</td><td>${esc(a.service)}</td><td>${esc(a.status)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Nenhum agendamento futuro.</p>'}</div><p class="dashboard-footnote">O painel inicial mostra apenas os principais indicadores e atalhos. Análises, metas e controles detalhados ficam na aba Dashboards.</p>`;
+ $('tableWrap').querySelectorAll('[data-home-action]').forEach(b=>b.onclick=()=>{active=b.dataset.homeAction;renderTabs();renderSection();if(active==='services')renderServiceForm();if(active==='appointments')renderAppointmentForm();});
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar o resumo inicial.</div>';console.error(err);}
+}
+
+// Ao adicionar veículo pela ficha, os dados do cliente existente não são recriados.
+renderClientVehicleForm=function(v={}){
+ if(!v.addAnother){return originalRenderClientVehicleForm(v);}
+ const client=v.clientRecord||{};editId=client.id||v.clientId;editingVehicleId=null;
+ const types=['Carro','SUV','Utilitário','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro'];
+ $('formWrap').innerHTML=`<form id="addVehicleForm"><h3>Adicionar veículo para ${esc(client.name||v.client||'cliente')}</h3><div class="form-grid">
+  <div class="field"><label>Placa *</label><input name="plate" required maxlength="8" autocapitalize="characters" style="text-transform:uppercase"></div>
+  <div class="field"><label>Tipo de veículo *</label><select name="type" required><option value="">Selecione...</option>${types.map(t=>`<option>${t}</option>`).join('')}</select></div>
+  <div class="field"><label>Marca</label><input name="brand"></div><div class="field"><label>Modelo</label><input name="model"></div>
+  <div class="field"><label>Cor</label><input name="color"></div><div class="field"><label>Observações</label><input name="notes"></div>
+ </div><p class="muted small">O veículo será vinculado ao cadastro existente. Nenhum novo cliente será criado.</p><div class="form-actions"><button type="button" class="secondary" id="cancelAddVehicle">Cancelar</button><button class="primary" type="submit">Salvar veículo</button></div></form>`;
+ $('formWrap').classList.remove('hidden');
+ const form=$('addVehicleForm'),plate=form.elements.plate;
+ plate.oninput=()=>{const p=plate.selectionStart;plate.value=normalizePlate(plate.value);try{plate.setSelectionRange(p,p)}catch(e){}};
+ $('cancelAddVehicle').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;try{
+  const d=Object.fromEntries(new FormData(form).entries()),p=normalizePlate(d.plate);if(!p)throw new Error('Informe a placa.');
+  const vs=await all('vehicles');if(vs.some(x=>normalizePlate(x.plate)===p))throw new Error('Esta placa já está cadastrada.');
+  await save('vehicles',{client:client.name||v.client,clientId:client.id||v.clientId,plate:p,type:d.type,brand:d.brand,model:d.model,color:d.color,notes:d.notes||''});
+  $('formWrap').classList.add('hidden');showToast('Novo veículo vinculado ao cliente.');await renderClientVehicleTable();await renderStats();
+ }catch(err){showToast('Não foi possível salvar: '+err.message);}finally{btn.disabled=false;}};
+};
+
+renderClientVehicleTable=async function(){
+ try{
+  const [clients,vehicles,services]=await Promise.all([all('clients'),all('vehicles'),all('services')]);
+  const q=normalizeText($('searchInput').value);
+  const cards=clients.map(c=>{
+   const vs=vehicles.filter(v=>v.clientId===c.id||sameClient(v.client,c.name));
+   const ss=services.filter(s=>sameClient(s.client,c.name));
+   return {c,vs,ss};
+  }).filter(x=>!q||[x.c.name,x.c.phone,x.c.document,...x.vs.flatMap(v=>[v.plate,v.model,v.brand,v.type])].some(v=>normalizeText(v).includes(q)));
+  if(!cards.length){$('tableWrap').innerHTML='<div class="empty">Nenhum cliente encontrado. Toque em “Novo cliente” para cadastrar.</div>';return;}
+  const ranking=cards.slice().sort((a,b)=>b.ss.length-a.ss.length).slice(0,5);
+  $('tableWrap').innerHTML=`<div class="client-ranking"><strong>Clientes mais frequentes</strong>${ranking.map((x,i)=>`<span>${i+1}. ${esc(x.c.name)} — ${x.ss.length} serviço(s)</span>`).join('')}</div>`+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
+   <div class="client-vehicles">${vs.length?vs.map(v=>`<div class="client-vehicle-row"><span><b>${esc(normalizePlate(v.plate))}</b> · ${esc([v.brand,v.model,v.type].filter(Boolean).join(' ')||'Veículo')}</span><button class="action" data-editvehicle="${esc(v.id)}">Editar</button></div>`).join(''):'<p class="muted">Nenhum veículo cadastrado.</p>'}</div>
+   <div class="client-actions"><button class="action" data-addvehicle="${esc(c.id)}">+ Veículo</button><button class="action" data-newservice="${esc(c.id)}">Novo serviço</button><button class="action" data-newappointment="${esc(c.id)}">Agendar</button><button class="action" data-history="${esc(c.id)}">Histórico</button><button class="action danger-action" data-deleteclient="${esc(c.id)}">Excluir cliente</button></div></article>`).join('');
+  $('tableWrap').querySelectorAll('[data-addvehicle]').forEach(b=>{const c=cards.find(x=>x.c.id===b.dataset.addvehicle).c;b.onclick=()=>renderClientVehicleForm({addAnother:true,clientId:c.id,clientRecord:c});});
+  $('tableWrap').querySelectorAll('[data-editvehicle]').forEach(b=>{const v=vehicles.find(x=>x.id===b.dataset.editvehicle);const c=clients.find(x=>x.id===v.clientId)||clients.find(x=>sameClient(x.name,v.client));originalRenderClientVehicleForm({...v,clientId:c?.id,clientRecord:c||{name:v.client}});});
+  $('tableWrap').querySelectorAll('[data-newservice]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.newservice),v=selectedVehicleForClient(c,vehicles);if(!v){showToast('Cadastre um veículo para este cliente antes de lançar o serviço.');return;}active='services';renderTabs();renderSection();renderServiceForm({vehicle:normalizePlate(v.plate)});});
+  $('tableWrap').querySelectorAll('[data-newappointment]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.newappointment),v=selectedVehicleForClient(c,vehicles);if(!v){showToast('Cadastre um veículo para este cliente antes de agendar.');return;}active='appointments';renderTabs();renderSection();renderAppointmentForm({client:c.name,vehicle:normalizePlate(v.plate)});});
+  $('tableWrap').querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.history),ss=services.filter(s=>sameClient(s.client,c.name)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));$('tableWrap').innerHTML=`<div class="history-panel"><button class="secondary" id="backClients">← Voltar</button><h3>Histórico de ${esc(c.name)}</h3><p>Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')} · ${ss.length} serviço(s)</p>${ss.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Veículo</th><th>Serviço</th><th>Valor</th><th>Situação</th></tr></thead><tbody>${ss.map(s=>`<tr><td>${dateBR(s.date)}</td><td>${esc(s.vehicle||'Sem placa')}</td><td>${esc(s.service)}</td><td>${money(s.value)}</td><td>${esc(s.status||'')}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum serviço registrado.</p>'}</div>`;$('backClients').onclick=()=>renderClientVehicleTable();});
+  $('tableWrap').querySelectorAll('[data-deleteclient]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.deleteclient);if(!confirm(`Excluir o cadastro de ${c.name}? Os serviços e pagamentos históricos serão preservados, mas os veículos vinculados serão removidos.`))return;try{for(const v of vehicles.filter(x=>x.clientId===c.id||sameClient(x.client,c.name)))await remove('vehicles',v.id);await remove('clients',c.id);showToast('Cadastro excluído. Histórico financeiro e de serviços preservado.');await renderClientVehicleTable();await renderStats();}catch(err){showToast('Erro ao excluir: '+err.message);}});
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os cadastros. Verifique a conexão.</div>';console.error(err);}
+};
+
+async function renderPendingPaymentsTable(){
+ try{const rows=(await all('payments')).filter(p=>p.status==='Pendente');const q=normalizeText($('searchInput').value);const list=rows.filter(p=>!q||normalizeText([p.client,p.description,p.method].join(' ')).includes(q));const total=list.reduce((n,p)=>n+Number(p.value||0),0);
+ $('tableWrap').innerHTML=`<div class="dashboard-metrics"><div class="dashboard-metric"><span>Pagamentos pendentes</span><strong>${list.length}</strong></div><div class="dashboard-metric"><span>Total pendente</span><strong>${money(total)}</strong></div></div>${list.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Ação</th></tr></thead><tbody>${list.map(p=>`<tr><td>${dateBR(p.date)}</td><td>${esc(p.client)}</td><td>${esc(p.description)}</td><td>${money(p.value)}</td><td><button class="action" data-settle="${p.id}">Atualizar pagamento</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhum pagamento pendente.</div>'}`;
+ $('tableWrap').querySelectorAll('[data-settle]').forEach(b=>b.onclick=async()=>{const p=list.find(x=>x.id===b.dataset.settle);const method=prompt('Forma de pagamento: Pix, Dinheiro, Cartão, Cartão de débito, Cartão de crédito, Transferência ou Outro.','Pix');if(method===null)return;const allowed=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'].find(x=>normalizeText(x)===normalizeText(method));if(!allowed){showToast('Forma de pagamento inválida.');return;}try{const date=localISODate();await save('payments',{...p,status:'Pago',method:allowed,date});if(p.serviceId){const ss=await all('services'),s=ss.find(x=>x.id===p.serviceId);if(s)await save('services',{...s,paymentStatus:'Recebido',paymentMethod:allowed});}showToast('Pagamento atualizado.');await renderPendingPaymentsTable();await renderStats();}catch(err){showToast('Erro ao atualizar: '+err.message);}});
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os pagamentos pendentes.</div>';}}
+
+function getLocalSettings(){try{return JSON.parse(localStorage.getItem('autoBrilhoSettings')||'{}')}catch(e){return {}}}
+function setLocalSettings(v){localStorage.setItem('autoBrilhoSettings',JSON.stringify(v));}
+function monthWorkingDays(year,month,holidays=[]){let n=0;const fixed=['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25'].map(x=>year+'-'+x);const excluded=[...new Set([...fixed,...holidays])];const d=new Date(year,month-1,1);while(d.getMonth()===month-1){const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');if(d.getDay()!==0&&!excluded.includes(iso))n++;d.setDate(d.getDate()+1);}return n;}
+function isDueAlert(e){if(!e.dueDate||!['Em aberto','Pendente'].includes(e.paymentStatus))return false;const today=new Date(localISODate()+'T00:00:00'),due=new Date(e.dueDate+'T00:00:00');return Math.round((due-today)/86400000)<=2;}
+async function closeDueNotificationsIfClear(){try{const expenses=await all('expenses');if(!expenses.some(isDueAlert)&&navigator.serviceWorker?.ready){const reg=await navigator.serviceWorker.ready;const notes=await reg.getNotifications({tag:'auto-brilho-payables'});notes.forEach(n=>n.close());}}catch(e){}}
+async function addDashboardExtras(){
+ const target=$('tableWrap');if(!target||active!=='dashboard')return;
+ try{const [services,expenses]=await Promise.all([all('services'),all('expenses')]);const now=new Date(),year=now.getFullYear(),month=now.getMonth()+1,key=year+'-'+String(month).padStart(2,'0');const done=services.filter(s=>s.status==='Concluído'&&s.date?.slice(0,7)===key);const days=[...new Set(done.map(s=>s.date))];const revenue=done.reduce((n,s)=>n+Number(s.value||0),0);const avgTicket=done.length?revenue/done.length:0;const settings=getLocalSettings();const holidays=(settings.holidays||'').split(',').map(x=>x.trim()).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));const workdays=monthWorkingDays(year,month,holidays);const dailyTarget=Number(settings.dailyTarget||0);const targetRevenue=dailyTarget*workdays;const targetServices=avgTicket>0?Math.ceil(targetRevenue/avgTicket):0;const alerts=expenses.filter(isDueAlert);if(!alerts.length)await closeDueNotificationsIfClear();const cats=['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo'];const caps=settings.caps||{};const paidExpenses=expenses.filter(e=>e.paymentStatus==='Pago'&&e.date?.slice(0,7)===key);const byCat=cats.map(c=>({c,total:paidExpenses.filter(e=>e.category===c).reduce((n,e)=>n+Number(e.value||0),0)}));const staff=paidExpenses.filter(e=>e.category==='Funcionários');const staffGroups={};staff.forEach(e=>{const k=e.supplier||e.subcategory||e.description||'Não identificado';staffGroups[k]=(staffGroups[k]||0)+Number(e.value||0);});
+ const holidayText=settings.holidays||'';
+ const html=`<div class="dashboard-chart-panel"><h3>Metas do mês</h3><p>Domingos e feriados cadastrados são descontados dos dias úteis. Feriados móveis/locais devem ser informados manualmente.</p><button class="action" type="button" id="enableDueNotificationsTop">Ativar notificações de vencimento</button><form id="goalForm" class="form-grid"><div class="field"><label>Meta média diária (R$)</label><input name="dailyTarget" type="number" min="0" step="0.01" value="${esc(settings.dailyTarget||'')}" placeholder="Ex.: 350"></div><div class="field"><label>Feriados do mês (AAAA-MM-DD, separados por vírgula)</label><input name="holidays" value="${esc(holidayText)}" placeholder="2026-11-20"></div><div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar meta e feriados</button></div></form><div class="dashboard-metrics"><div class="dashboard-metric"><span>Dias úteis previstos</span><strong>${workdays}</strong></div><div class="dashboard-metric"><span>Dias trabalhados (dias com serviço concluído)</span><strong>${days.length}</strong></div><div class="dashboard-metric"><span>Média diária realizada</span><strong>${money(days.length?revenue/days.length:0)}</strong></div><div class="dashboard-metric"><span>Meta de faturamento</span><strong>${money(targetRevenue)}</strong><small>${targetRevenue?Math.min(100,revenue/targetRevenue*100).toFixed(1).replace('.',',')+'% atingido':'Informe uma meta diária'}</small></div><div class="dashboard-metric"><span>Meta estimada de serviços</span><strong>${targetServices||'—'}</strong><small>Ticket médio atual: ${money(avgTicket)}</small></div><div class="dashboard-metric"><span>Serviços concluídos</span><strong>${done.length}</strong><small>${targetServices?Math.min(100,done.length/targetServices*100).toFixed(1).replace('.',',')+'% da meta':'Meta indisponível'}</small></div></div></div>
+ <div class="dashboard-chart-panel"><h3>Teto de gastos por categoria</h3><p>Defina o limite percentual sobre o faturamento do mês. Os limites ficam salvos neste navegador.</p><form id="capsForm" class="form-grid">${cats.map(c=>`<div class="field"><label>${esc(c)} (%)</label><input type="number" min="0" max="100" step="0.1" name="${esc(c)}" value="${esc(caps[c]??'')}" placeholder="Sem limite"></div>`).join('')}<div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar limites</button></div></form><div class="table-scroll"><table><thead><tr><th>Categoria</th><th>Gasto no mês</th><th>% do faturamento</th><th>Teto</th></tr></thead><tbody>${byCat.map(x=>{const pct=revenue?x.total/revenue*100:null,cap=Number(caps[x.c]||0);return `<tr><td>${esc(x.c)}</td><td>${money(x.total)}</td><td>${pct===null?'—':pct.toFixed(1).replace('.',',')+'%'}</td><td>${cap?cap+'%':'Não definido'} ${cap&&pct>cap?'⚠ Acima do teto':''}</td></tr>`}).join('')}</tbody></table></div></div>
+ <div class="dashboard-chart-panel"><h3>Resumo de pagamentos de funcionários</h3><p>Despesas pagas na categoria Funcionários neste mês.</p>${Object.keys(staffGroups).length?`<div class="table-scroll"><table><thead><tr><th>Funcionário / descrição</th><th>Total pago</th></tr></thead><tbody>${Object.entries(staffGroups).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${money(v)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum pagamento de funcionário registrado neste mês.</p>'}</div>
+ ${alerts.length?`<div class="alert-panel"><strong>Contas próximas do vencimento ou vencidas</strong>${alerts.map(e=>`<p>${dateBR(e.dueDate)} · ${esc(e.description)} · ${money(e.value)}</p>`).join('')}<button class="action" id="goPayables">Abrir contas a pagar</button> <button class="action" id="enableDueNotifications">Ativar notificações</button></div>`:''}`;
+ target.insertAdjacentHTML('beforeend',html);
+ if($('enableDueNotificationsTop'))$('enableDueNotificationsTop').onclick=async()=>{if(!('Notification'in window)){showToast('Este navegador não oferece notificações.');return;}const permission=await Notification.requestPermission();showToast(permission==='granted'?'Notificações ativadas. Abra o aplicativo diariamente para verificar vencimentos.':'Permissão não concedida.');};
+ $('goalForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());const old=getLocalSettings();setLocalSettings({...old,dailyTarget:Number(d.dailyTarget||0),holidays:d.holidays||''});showToast('Meta salva neste aparelho.');renderDashboards();};
+ $('capsForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());const old=getLocalSettings();old.caps={};cats.forEach(c=>{if(d[c]!=='')old.caps[c]=Number(d[c]);});setLocalSettings(old);showToast('Limites salvos neste aparelho.');renderDashboards();};
+ if($('goPayables'))$('goPayables').onclick=()=>{active='payables';renderTabs();renderSection();};
+ if($('enableDueNotifications'))$('enableDueNotifications').onclick=async()=>{if(!('Notification'in window)){showToast('Este navegador não oferece notificações.');return;}const permission=await Notification.requestPermission();showToast(permission==='granted'?'Notificações ativadas. Abra o aplicativo diariamente para verificar vencimentos.':'Permissão de notificação não concedida.');};
+ if(alerts.length&&'Notification'in window&&Notification.permission==='granted'){
+  const unseen=alerts.filter(e=>!localStorage.getItem('ab-notified-'+e.id));
+  if(unseen.length&&navigator.serviceWorker?.ready){navigator.serviceWorker.ready.then(reg=>reg.showNotification('Auto Brilho: conta a vencer',{body:unseen.length+' conta(s) vencem em até 2 dias ou estão atrasadas.',tag:'auto-brilho-payables'})).catch(()=>{});unseen.forEach(e=>localStorage.setItem('ab-notified-'+e.id,'1'));}
+ }
+ }catch(err){console.error('Extras do painel:',err);}
+}
+renderDashboards=async function(){await originalRenderDashboards();await addDashboardExtras();};
+renderStats=async function(){
+ try{const [clients,services,payments,expenses]=await Promise.all([all('clients'),all('services'),all('payments'),all('expenses')]);const key=localISODate().slice(0,7);const done=services.filter(s=>s.status==='Concluído'&&s.date?.slice(0,7)===key);const received=payments.filter(p=>p.status==='Pago'&&p.date?.slice(0,7)===key).reduce((n,p)=>n+Number(p.value||0),0);const pending=payments.filter(p=>p.status==='Pendente').reduce((n,p)=>n+Number(p.value||0),0);const spent=expenses.filter(e=>e.paymentStatus==='Pago'&&e.date?.slice(0,7)===key).reduce((n,e)=>n+Number(e.value||0),0);
+ $('stats').innerHTML=`<div class="stat"><div class="label">Recebido no mês</div><div class="value">${money(received)}</div></div><div class="stat"><div class="label">Serviços concluídos</div><div class="value">${done.length}</div></div><div class="stat"><div class="label">Pagamentos pendentes</div><div class="value">${money(pending)}</div></div><div class="stat"><div class="label">Clientes cadastrados</div><div class="value">${clients.length}</div></div><div style="grid-column:1/-1"><button type="button" class="secondary wide" id="dailyCloseBtn">Fechamento do dia</button></div>`;$('dailyCloseBtn').onclick=()=>renderDailyClose();
+ }catch(err){console.error('Indicadores principais:',err);}
+};
+
+async function renderFinancialMovement(){
+ try{const [payments,expenses]=await Promise.all([all('payments'),all('expenses')]);
+  const entries=payments.filter(p=>p.status!=='Estornado').map(p=>({date:p.date,type:'Entrada',status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client,value:Number(p.value||0)}));
+  const exits=expenses.map(e=>({date:e.paymentStatus==='Pago'?(e.date||e.paidAt):(e.dueDate||e.date),type:'Saída',status:e.paymentStatus||'Em aberto',description:e.description,person:e.supplier||e.category,value:Number(e.value||0)}));
+  const rows=[...entries,...exits].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const income=entries.filter(x=>x.status==='Pago').reduce((n,x)=>n+x.value,0),out=exits.filter(x=>x.status==='Pago').reduce((n,x)=>n+x.value,0);
+  const pendingIn=entries.filter(x=>x.status==='Pendente').reduce((n,x)=>n+x.value,0),pendingOut=exits.filter(x=>['Em aberto','Pendente'].includes(x.status)).reduce((n,x)=>n+x.value,0);
+  $('financialMovement').innerHTML=`<div class="dashboard-metrics"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(income)}</strong></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(out)}</strong></div><div class="dashboard-metric"><span>Resultado realizado</span><strong>${money(income-out)}</strong></div><div class="dashboard-metric"><span>Recebimentos pendentes</span><strong>${money(pendingIn)}</strong></div><div class="dashboard-metric"><span>Contas a pagar em aberto</span><strong>${money(pendingOut)}</strong></div></div><h3>Movimento financeiro completo</h3>${rows.length?`<div class="table-scroll"><table><thead><tr><th>Data / vencimento</th><th>Tipo</th><th>Situação</th><th>Descrição</th><th>Cliente / fornecedor</th><th>Valor</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${r.type}</td><td>${esc(r.status)}</td><td>${esc(r.description)}</td><td>${esc(r.person||'')}</td><td>${money(r.value)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhuma movimentação registrada.</p>'}`;
+ }catch(err){$('financialMovement').textContent='Não foi possível carregar o movimento financeiro.';}
+}
+function excelDate(v){if(v instanceof Date)return v.toISOString().slice(0,10);if(typeof v==='number'&&v>20000){const d=XLSX.SSF.parse_date_code(v);return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;}const s=String(v??'').trim();if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const [d,m,y]=s.split('/');return `${y}-${m}-${d}`;}if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;return '';}
+function rowObjects(ws){const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});return rows;}
+async function stageExcelFile(file){
+ if(!window.XLSX)throw new Error('Leitor Excel indisponível.');const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});const get=n=>wb.Sheets[n]?rowObjects(wb.Sheets[n]):[];
+ const clients=get('Clientes').map((r,i)=>({r,i})).filter(x=>String(x.r['Nome completo']||'').trim()).map(({r,i})=>({name:String(r['Nome completo']).trim(),phone:String(r['Telefone / WhatsApp']||'').trim(),email:r['E-mail']||'',document:String(r['CPF / CNPJ']||'').trim(),address:r['Endereço']||'',notes:r['Observações']||'',registrationDate:'',importKey:'excel-client-'+i+'-'+normalizeText(r['Nome completo'])}));
+ const vehicles=get('Veículos').filter(r=>String(r['Placa']||'').trim()).map(r=>({client:String(r['Cliente']||'').trim(),plate:normalizePlate(r['Placa']),type:String(r['Tipo de veículo']||'Outro').trim(),brand:String(r['Marca']||'').trim(),model:String(r['Modelo']||'').trim(),color:String(r['Cor']||'').trim(),notes:r['Observações']||''}));
+ const services=get('Serviços realizados').map((r,i)=>({r,i})).filter(x=>String(x.r['Data']||'').trim()&&String(x.r['Cliente']||'').trim()).map(({r,i})=>({importKey:'excel-service-'+i,date:excelDate(r['Data']),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Concluído').trim(),paymentStatus:String(r['Situação financeira']||'').trim()==='Recebido'?'Recebido':'Pendente',paymentMethod:String(r['Tipo de pagamento']||'').trim(),notes:String(r['Observações']||'').trim()}));
+ const payments=get('Receitas e pagamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Descrição']||'').trim()).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim(),description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
+ const expenseRows=get('Despesas');const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&String(d['Valor (R$)'])===String(p['Valor (R$)'])&&String(d['Data de vencimento']||d['Data do pagamento']||'')===String(p['Data de vencimento']||p['Data do pagamento']||'')));const expenses=[...expenseRows,...payableRows].map((r,i)=>({r,i})).filter(x=>String(x.r['Descrição']||'').trim()).map(({r,i})=>({importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:excelDate(r['Data de vencimento']),category:String(r['Categoria']||'Diversos').trim(),subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:normalizeText(r['Situação'])==='pago'?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()}));
+ const appointments=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
+ return {clients,vehicles,services,payments,expenses,appointments};
+}
+function serviceKey(s){return [s.date,normalizeText(s.client),normalizePlate(s.vehicle),normalizeText(s.service),Number(s.value||0).toFixed(2)].join('|');}
+async function downloadPreImportBackup(){const backup={app:'Auto Brilho Web',version:3,reason:'Backup automático antes da importação Excel',exportedAt:new Date().toISOString(),data:{}};for(const [key,m] of Object.entries(modules))backup.data[key]=await all(m.store);backup.data.settings=getLocalSettings();const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`Auto_Brilho_Backup_Pre_Importacao_${localISODate()}.json`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
+async function importStagedExcel(){
+ if(!stagedExcelImport)return;const btn=$('confirmExcelImport');btn.disabled=true;btn.textContent='Importando...';
+ try{
+  await downloadPreImportBackup();
+  const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,appointments:0,duplicates:0};
+  let currentClients=await all('clients'),currentVehicles=await all('vehicles'),currentServices=await all('services'),currentPayments=await all('payments'),currentExpenses=await all('expenses'),currentAppointments=await all('appointments');
+  const clientMap=new Map();
+  for(const c of data.clients){let found=currentClients.find(x=>x.importKey===c.importKey)||(c.document&&currentClients.find(x=>String(x.document||'').replace(/\D/g,'')===c.document.replace(/\D/g,'')))||(c.phone&&currentClients.find(x=>String(x.phone||'').replace(/\D/g,'')===c.phone.replace(/\D/g,'')))||(!c.phone&&!c.document&&currentClients.find(x=>sameClient(x.name,c.name)&&!x.importKey));if(found){clientMap.set(normalizeText(c.name),found);counts.duplicates++;}else{const saved=await save('clients',c);currentClients.push(saved);clientMap.set(normalizeText(c.name),saved);counts.clients++;}}
+  for(const v of data.vehicles){const cl=clientMap.get(normalizeText(v.client))||currentClients.find(c=>sameClient(c.name,v.client));const existing=currentVehicles.find(x=>normalizePlate(x.plate)===v.plate);if(existing){counts.duplicates++;continue;}if(!cl){counts.duplicates++;continue;}const saved=await save('vehicles',{...v,clientId:cl.id,client:cl.name});currentVehicles.push(saved);counts.vehicles++;}
+  const serviceMap=new Map();
+  for(const s of data.services){if(!s.date||!Number.isFinite(s.value)){counts.duplicates++;continue;}const key=serviceKey(s);let found=currentServices.find(x=>x.importKey===s.importKey||(!x.importKey&&serviceKey(x)===key));if(found){counts.duplicates++;serviceMap.set(key,found);continue;}const saved=await save('services',{...s,importKey:key,vehicle:s.vehicle||'SEM PLACA'});currentServices.push(saved);serviceMap.set(key,saved);counts.services++;}
+  for(const p of data.payments){let matched=null;const plate=(p.description.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2,3}/i)||[])[0]||'';matched=currentServices.find(s=>s.date===p.date&&sameClient(s.client,p.client)&&Math.abs(Number(s.value||0)-p.value)<0.01&&(!plate||normalizePlate(s.vehicle)===normalizePlate(plate)));if(matched){const old=currentPayments.find(x=>x.serviceId===matched.id);if(old){counts.duplicates++;continue;}const status=normalizeText(p.status)==='pago'?'Pago':normalizeText(p.status)==='brinde'?'Brinde':'Pendente';const saved=await save('payments',{...p,status,serviceId:matched.id});currentPayments.push(saved);counts.payments++;}else{const exists=currentPayments.some(x=>x.date===p.date&&sameClient(x.client,p.client)&&normalizeText(x.description)===normalizeText(p.description)&&Math.abs(Number(x.value||0)-p.value)<0.01);if(exists){counts.duplicates++;continue;}const saved=await save('payments',{...p,status:normalizeText(p.status)==='pago'?'Pago':p.status});currentPayments.push(saved);counts.payments++;}}
+  for(const e of data.expenses){if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.some(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&sameClient(x.category,e.category)));if(exists){counts.duplicates++;continue;}const saved=await save('expenses',e);currentExpenses.push(saved);counts.expenses++;}
+  for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
+  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';showToast('Importação concluída. Confira os totais.');$('exportStatus').textContent=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos, ${counts.expenses} despesas e ${counts.appointments} agendamentos. ${counts.duplicates} registro(s) ignorado(s) por possível duplicidade.`;await renderStats();await renderFinancialMovement();
+ }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
+}
+
+async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços, incluindo lançamentos sem placa</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li><li>${d.appointments.length} agendamentos</li></ul><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
+
+async function exportExcel(){
+ const status=$('exportStatus');status.textContent='Preparando relatórios...';
+ try{const wb=XLSX.utils.book_new();const [clients,vehicles,services,appointments,payments,expenses]=await Promise.all(['clients','vehicles','services','appointments','payments','expenses'].map(all));
+  const sheets=[['Clientes',clients,[['name','Nome'],['phone','Telefone'],['registrationDate','Data de cadastro'],['document','CPF/CNPJ'],['address','Endereço']]],['Veículos',vehicles,[['client','Cliente'],['plate','Placa'],['type','Tipo'],['brand','Marca'],['model','Modelo'],['color','Cor']]],['Serviços',services,[['date','Data'],['client','Cliente'],['vehicle','Veículo/placa'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]],['Agendamentos',appointments,[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]],['Pagamentos',payments,[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]],['Despesas',expenses,[['date','Data pagamento'],['dueDate','Vencimento'],['category','Categoria'],['subcategory','Subcategoria'],['description','Descrição'],['supplier','Fornecedor'],['value','Valor'],['payment','Forma'],['paymentStatus','Situação']]]];
+  for(const [name,rows,cols] of sheets){const data=rows.map(r=>Object.fromEntries(cols.map(([k,l])=>[l,(k==='date'||k==='dueDate')?dateBR(r[k]):r[k]??''])));const ws=XLSX.utils.json_to_sheet(data);XLSX.utils.book_append_sheet(wb,ws,name);}
+  const movementRaw=[...payments.filter(p=>p.status!=='Estornado').map(p=>({iso:p.date,Data:dateBR(p.date),Tipo:'Entrada',Situação:p.status,Descrição:p.description,Cliente:p.client,Valor:Number(p.value||0)})),...expenses.map(e=>{const iso=e.paymentStatus==='Pago'?(e.date||e.paidAt):(e.dueDate||e.date);return {iso,Data:dateBR(iso),Tipo:'Saída',Situação:e.paymentStatus,Descrição:e.description,Fornecedor:e.supplier||e.category,Valor:Number(e.value||0)};})].sort((a,b)=>String(b.iso).localeCompare(String(a.iso)));const movement=movementRaw.map(({iso,...r})=>r);XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(movement),'Movimento financeiro');
+  const openPayables=expenses.filter(e=>['Em aberto','Pendente'].includes(e.paymentStatus)).map(e=>({Vencimento:dateBR(e.dueDate||e.date),Categoria:e.category,Subcategoria:e.subcategory,Descrição:e.description,Fornecedor:e.supplier,Valor:Number(e.value||0),Situação:e.paymentStatus}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(openPayables),'Contas a pagar');
+  XLSX.writeFile(wb,`Auto_Brilho_Relatorios_${localISODate()}.xlsx`);status.textContent='Relatórios gerados com movimento financeiro unificado.';showToast('Excel exportado.');
+ }catch(e){status.textContent='Falha ao gerar relatório: '+e.message;}
+}
+
+// Inicialização da aba Relatórios e lembretes de vencimento.
+
 $('addBtn').onclick=()=>renderForm();
 
 $('refreshBtn').onclick=()=>{
- renderTable();
+ if(active==='home')renderHomePanel();else if(active==='dashboard')renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else if(active==='reports')renderFinancialMovement();else renderTable();
  renderStats();
  showToast('Dados atualizados da nuvem.');
 };
 
-$('searchInput').addEventListener('input',renderTable);
+$('searchInput').addEventListener('input',()=>{if(active==='pending')renderPendingPaymentsTable();else if(active!=='reports')renderTable();});
 
 $('exportBtn').onclick=exportExcel;
+setupExcelImport();
 $('backupBtn').onclick=backupJSON;
 
 window.addEventListener('beforeinstallprompt',e=>{
