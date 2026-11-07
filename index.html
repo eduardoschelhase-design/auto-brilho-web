@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=9">
 <title>Auto Brilho | Gestão</title>
 </head>
 <body>
@@ -51,20 +51,22 @@
  <main>
   <section class="stats" id="stats"></section>
   <nav class="tabs" id="tabs" aria-label="Seções"></nav>
-  <section class="panel">
+  <section class="panel" id="mainPanel">
    <div class="panel-head"><div><p class="eyebrow" id="sectionEyebrow">GESTÃO</p><h2 id="sectionTitle">Clientes</h2></div><button id="addBtn" class="primary" type="button">+ Novo cadastro</button></div>
    <div id="formWrap" class="form-wrap hidden"></div>
    <div class="tools"><input id="searchInput" type="search" placeholder="Buscar neste cadastro…" aria-label="Buscar"><button id="refreshBtn" class="secondary" type="button">Atualizar</button></div>
    <div id="tableWrap" class="table-wrap"></div>
   </section>
-  <section class="panel reports">
-   <div class="panel-head"><div><p class="eyebrow">DADOS DO NEGÓCIO</p><h2>Relatórios Excel</h2><p class="muted">Gere uma pasta de trabalho com seis abas.</p></div><span class="excel-mark">XLSX</span></div>
-   <button id="exportBtn" class="primary wide" type="button">Exportar os 6 relatórios para Excel</button>
+  <section class="panel reports" id="reportsPanel">
+   <div class="panel-head"><div><p class="eyebrow">DADOS DO NEGÓCIO</p><h2>Relatórios Excel</h2><p class="muted">Importe seu histórico Excel, confira o movimento financeiro e gere relatórios.</p></div><span class="excel-mark">XLSX</span></div>
+   <div class="field"><label for="importExcelFile">Importar histórico de uma planilha Excel (.xlsx ou .xls)</label><input id="importExcelFile" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div>
+   <div id="importPreview" class="import-preview hidden"></div>
+   <button id="exportBtn" class="primary wide" type="button">Exportar relatórios para Excel</button>
    <button id="backupBtn" class="secondary wide backup-btn" type="button">Baixar backup completo (JSON)</button>
-   <p id="exportStatus" class="muted small"></p>
+   <div id="financialMovement" class="financial-movement"></div><p id="exportStatus" class="muted small"></p>
    <p class="small muted">Para criar o arquivo Excel, é necessária uma conexão com a internet no momento da exportação.</p>
   </section>
-  <section class="notice"><span class="notice-icon">ⓘ</span><p><strong>Importante sobre seus dados</strong><br>Os registros são armazenados na nuvem e sincronizados quando você estiver conectado. Baixe backups regularmente e guarde-os em local seguro. A exportação Excel gera seis abas de relatórios.</p></section>
+  <section class="notice"><span class="notice-icon">ⓘ</span><p><strong>Importante sobre seus dados</strong><br>Os registros são armazenados na nuvem e sincronizados quando você estiver conectado. Baixe backups regularmente e guarde-os em local seguro. A exportação Excel reúne cadastros, serviços e movimento financeiro.</p></section>
   <footer>Auto Brilho · Web com banco de dados na nuvem</footer>
  </main>
 </div>
@@ -72,10 +74,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=9"></script>
 <script>
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=7').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=9').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
 }
 </script>
 </body>
