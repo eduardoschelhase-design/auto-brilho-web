@@ -40,9 +40,9 @@ function bindDecimalInput(input){
 }
 function localISODate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function dateBR(v){if(!v)return '';const p=String(v).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:v}
-function showToast(msg){$('toast').textContent=msg;$('toast')?.classList.add('show');setTimeout(()=>$('toast')?.classList.remove('show'),2600)}
+function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
 function setLoginMessage(msg){$('loginMessage').textContent=msg}
-function showApp(show){$('loginScreen')?.classList.toggle('hidden',show);$('appShell')?.classList.toggle('hidden',!show);$('logoutBtn')?.classList.toggle('hidden',!show)}
+function showApp(show){$('loginScreen').classList.toggle('hidden',show);$('appShell').classList.toggle('hidden',!show);$('logoutBtn').classList.toggle('hidden',!show)}
 
 async function all(store){
  const {data,error}=await sbClient.from(store).select('id,data,created_at,updated_at').order('created_at',{ascending:false});
@@ -87,7 +87,7 @@ function renderTabs(){
    editId=null;
    editingVehicleId=null;
 
-   $('formWrap')?.classList.add('hidden');
+   $('formWrap').classList.add('hidden');
 
    renderTabs();
    renderSection();
@@ -108,9 +108,9 @@ function renderSection(){
   active==='clients'?'Clientes e veículos':
   modules[active].label;
 
- $('addBtn')?.classList.toggle('hidden',isDashboard);
- $('formWrap')?.classList.add('hidden');
- $('searchInput')?.parentElement?.classList.toggle('hidden',isDashboard);
+ $('addBtn').classList.toggle('hidden',isDashboard);
+ $('formWrap').classList.add('hidden');
+ $('searchInput').parentElement.classList.toggle('hidden',isDashboard);
 
  if(isDashboard){
   renderDashboards();
@@ -159,11 +159,11 @@ function renderForm(item={}){
   return `<div class="field"><label>${esc(label)}${required?' *':''}</label>${input}</div>`;
  }).join('')}</div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar cadastro'}</button></div></form>`;
 
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
  bindDecimalInput($('recordForm').elements.value);
 
  $('cancelForm').onclick=()=>{
-  $('formWrap')?.classList.add('hidden');
+  $('formWrap').classList.add('hidden');
   editId=null;
  };
 
@@ -179,7 +179,7 @@ function renderForm(item={}){
    else data.createdAt=new Date().toISOString();
 
    await save(m.store,data);
-   $('formWrap')?.classList.add('hidden');
+   $('formWrap').classList.add('hidden');
    editId=null;
    showToast('Cadastro salvo na nuvem.');
    await renderTable();
@@ -214,9 +214,9 @@ function renderExpenseForm(item={},isPayable=false){
   </div>
   <div class="form-actions"><button type="button" class="secondary" id="cancelExpenseForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':isPayable?'Salvar conta':'Salvar despesa'}</button></div>
  </form>`;
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
  bindDecimalInput($('expenseForm').elements.value);
- $('cancelExpenseForm').onclick=()=>{$('formWrap')?.classList.add('hidden');editId=null;};
+ $('cancelExpenseForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
  $('expenseForm').onsubmit=async e=>{
   e.preventDefault();
   const submit=e.target.querySelector('[type=submit]');submit.disabled=true;
@@ -236,7 +236,7 @@ function renderExpenseForm(item={},isPayable=false){
     data.paidAt=data.date;
    }
    await save('expenses',data);
-   $('formWrap')?.classList.add('hidden');editId=null;
+   $('formWrap').classList.add('hidden');editId=null;
    showToast(isPayable?'Conta a pagar salva.':'Despesa registrada.');
    await renderTable();await renderStats();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
@@ -319,7 +319,7 @@ function renderServiceForm(item={}){
     <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar serviço'}</button></div>
    </div>
   </form>`;
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
  const form=$('recordForm'), plateInput=$('servicePlate'), details=$('serviceDetails'), message=$('serviceVehicleMessage');
  let matchedVehicle=null;
  bindDecimalInput(form.elements.value);
@@ -349,7 +349,7 @@ function renderServiceForm(item={}){
    if(!matchedVehicle){
     details.classList.add('hidden');message.textContent='Veículo não cadastrado.';
     if(confirm(`A placa ${plate} não está cadastrada. Deseja cadastrar o cliente e o veículo agora?`)){
-     returnToServicesAfterVehicleRegistration=true;editId=null;$('formWrap')?.classList.add('hidden');active='clients';renderTabs();renderSection();renderClientVehicleForm({plate});
+     returnToServicesAfterVehicleRegistration=true;editId=null;$('formWrap').classList.add('hidden');active='clients';renderTabs();renderSection();renderClientVehicleForm({plate});
     }
     return;
    }
@@ -362,7 +362,7 @@ function renderServiceForm(item={}){
   finally{button.disabled=false;}
  }
  $('findServiceVehicle').onclick=findVehicle;
- $('cancelForm').onclick=()=>{$('formWrap')?.classList.add('hidden');editId=null;};
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
  if(item.id&&/^AAA[0-9]{4}$/.test(initialPlate)){matchedVehicle={plate:initialPlate,client:item.client||''};$('serviceClient').value=item.client||'';$('serviceVehicle').value=initialPlate;$('serviceVehicleInfo').textContent='Registro histórico: placa não anotada no atendimento. Não há veículo cadastrado para esta identificação.';details.classList.remove('hidden');message.textContent='Serviço histórico sem placa real; o registro será preservado.';}else if(item.id||initialPlate)findVehicle();
  form.onsubmit=async e=>{
   e.preventDefault();
@@ -380,7 +380,7 @@ function renderServiceForm(item={}){
    const saved=await save('services',data);
    if(saved.status==='Concluído')await syncServicePayment(saved);
    else await cancelLinkedServicePayment(saved.id);
-   $('formWrap')?.classList.add('hidden');editId=null;showToast('Serviço salvo na nuvem.');
+   $('formWrap').classList.add('hidden');editId=null;showToast('Serviço salvo na nuvem.');
    await renderTable();await renderStats();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
   finally{submit.disabled=false;}
@@ -435,14 +435,14 @@ async function renderAppointmentForm(item={}){
    </div>
    <div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar agendamento'}</button></div>
   </form>`;
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
  const form=$('recordForm'), statusField=$('appointmentStatus'), valueField=$('appointmentValueField'), valueInput=$('appointmentValue');
  bindDecimalInput(valueInput);
  statusField.onchange=()=>{
   const confirmed=statusField.value==='Confirmado';
   valueField.classList.toggle('hidden',!confirmed);valueInput.required=confirmed;
  };
- $('cancelForm').onclick=()=>{$('formWrap')?.classList.add('hidden');editId=null;};
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
  form.onsubmit=async e=>{
   e.preventDefault();const submit=form.querySelector('[type=submit]');submit.disabled=true;
   try{
@@ -470,7 +470,7 @@ async function renderAppointmentForm(item={}){
     if(savedService.status==='Concluído')await syncServicePayment(savedService);
     showToast(existing?'Serviço vinculado atualizado.':'Agendamento confirmado e serviço criado em Serviços.');
    }else showToast('Agendamento salvo na nuvem.');
-   $('formWrap')?.classList.add('hidden');editId=null;await renderTable();await renderStats();
+   $('formWrap').classList.add('hidden');editId=null;await renderTable();await renderStats();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
   finally{submit.disabled=false;}
  };
@@ -541,7 +541,7 @@ function renderClientVehicleForm(vehicle={}){
   </div>
  </form>`;
 
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
 
  const plateInput=$('recordForm').elements.plate;
 
@@ -553,7 +553,7 @@ function renderClientVehicleForm(vehicle={}){
  });
 
  $('cancelForm').onclick=()=>{
-  $('formWrap')?.classList.add('hidden');
+  $('formWrap').classList.add('hidden');
   editId=null;
   editingVehicleId=null;
   returnToServicesAfterVehicleRegistration=false;
@@ -590,7 +590,7 @@ function renderClientVehicleForm(vehicle={}){
     );
 
     if(keep){
-     $('formWrap')?.classList.add('hidden');
+     $('formWrap').classList.add('hidden');
      editId=null;
      editingVehicleId=null;
      showToast('Cadastro existente mantido. O histórico da placa foi preservado.');
@@ -676,7 +676,7 @@ function renderClientVehicleForm(vehicle={}){
     await save('vehicles',vehicleData);
    }
 
-   $('formWrap')?.classList.add('hidden');
+   $('formWrap').classList.add('hidden');
    editId=null;
    editingVehicleId=null;
 
@@ -1528,10 +1528,10 @@ function recoveryLinkPresent(){
 
 function showRecovery(message=''){
  recoveryMode=true;
- $('loginScreen')?.classList.add('hidden');
- $('appShell')?.classList.add('hidden');
- $('recoveryScreen')?.classList.remove('hidden');
- $('logoutBtn')?.classList.add('hidden');
+ $('loginScreen').classList.add('hidden');
+ $('appShell').classList.add('hidden');
+ $('recoveryScreen').classList.remove('hidden');
+ $('logoutBtn').classList.add('hidden');
 
  if(message)$('recoveryMessage').textContent=message;
 }
@@ -1578,7 +1578,7 @@ async function init(){
   setTimeout(async()=>{
    try{
     if(session){
-     if($('appShell')?.classList.contains('hidden')){
+     if($('appShell').classList.contains('hidden')){
       await enterApp();
      }
     }else{
@@ -1681,7 +1681,7 @@ async function init(){
    recoveryMode=false;
    clearRecoveryUrl();
 
-   $('recoveryScreen')?.classList.add('hidden');
+   $('recoveryScreen').classList.add('hidden');
    showApp(false);
    $('loginPassword').value='';
    setLoginMessage('Senha alterada. Entre usando a nova senha.');
@@ -1703,7 +1703,7 @@ async function init(){
   }catch(e){}
 
   clearRecoveryUrl();
-  $('recoveryScreen')?.classList.add('hidden');
+  $('recoveryScreen').classList.add('hidden');
   showApp(false);
   $('recoveryMessage').textContent='';
   setLoginMessage('Você voltou à tela de acesso.');
@@ -1740,20 +1740,20 @@ renderTabs=function(){
  ];
  $('tabs').innerHTML=tabs.map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
  $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
-  active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap')?.classList.add('hidden');renderTabs();renderSection();
+  active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap').classList.add('hidden');renderTabs();renderSection();
  });
 };
 
 renderSection=function(){
  const reports=active==='reports',home=active==='home',dashboard=active==='dashboard';
- $('mainPanel')?.classList.toggle('hidden',reports);$('reportsPanel')?.classList.toggle('hidden',!reports);
- $('stats')?.classList.toggle('hidden',reports||(!home&&!dashboard));
+ $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
+ $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
  if(reports){$('sectionTitle').textContent='Relatórios e importação';$('exportStatus').textContent='';renderFinancialMovement();return;}
  const special=home||dashboard||active==='pending';
  $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
  $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':modules[active]?.label||'Gestão';
- $('addBtn')?.classList.toggle('hidden',special);$('formWrap')?.classList.add('hidden');
- $('searchInput')?.parentElement?.classList.toggle('hidden',home||dashboard);
+ $('addBtn').classList.toggle('hidden',special);$('formWrap').classList.add('hidden');
+ $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':'+ Novo '+(modules[active]?.singular||'registro');
  $('searchInput').value='';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
@@ -1777,15 +1777,15 @@ renderClientVehicleForm=function(v={}){
   <div class="field"><label>Marca</label><input name="brand"></div><div class="field"><label>Modelo</label><input name="model"></div>
   <div class="field"><label>Cor</label><input name="color"></div><div class="field"><label>Observações</label><input name="notes"></div>
  </div><p class="muted small">O veículo será vinculado ao cadastro existente. Nenhum novo cliente será criado.</p><div class="form-actions"><button type="button" class="secondary" id="cancelAddVehicle">Cancelar</button><button class="primary" type="submit">Salvar veículo</button></div></form>`;
- $('formWrap')?.classList.remove('hidden');
+ $('formWrap').classList.remove('hidden');
  const form=$('addVehicleForm'),plate=form.elements.plate;
  plate.oninput=()=>{const p=plate.selectionStart;plate.value=normalizePlate(plate.value);try{plate.setSelectionRange(p,p)}catch(e){}};
- $('cancelAddVehicle').onclick=()=>{$('formWrap')?.classList.add('hidden');editId=null;};
+ $('cancelAddVehicle').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
  form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;try{
   const d=Object.fromEntries(new FormData(form).entries()),p=normalizePlate(d.plate);if(!p)throw new Error('Informe a placa.');
   const vs=await all('vehicles');if(vs.some(x=>normalizePlate(x.plate)===p))throw new Error('Esta placa já está cadastrada.');
   await save('vehicles',{client:client.name||v.client,clientId:client.id||v.clientId,plate:p,type:d.type,brand:d.brand,model:d.model,color:d.color,notes:d.notes||''});
-  $('formWrap')?.classList.add('hidden');showToast('Novo veículo vinculado ao cliente.');await renderClientVehicleTable();await renderStats();
+  $('formWrap').classList.add('hidden');showToast('Novo veículo vinculado ao cliente.');await renderClientVehicleTable();await renderStats();
  }catch(err){showToast('Não foi possível salvar: '+err.message);}finally{btn.disabled=false;}};
 };
 
@@ -1888,7 +1888,7 @@ async function importStagedExcel(){
   for(const p of data.payments){let matched=null;const plate=(p.description.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2,3}/i)||[])[0]||'';matched=currentServices.find(s=>s.date===p.date&&sameClient(s.client,p.client)&&Math.abs(Number(s.value||0)-p.value)<0.01&&(!plate||normalizePlate(s.vehicle)===normalizePlate(plate)));if(matched){const old=currentPayments.find(x=>x.serviceId===matched.id);if(old){counts.duplicates++;continue;}const status=normalizeText(p.status)==='pago'?'Pago':normalizeText(p.status)==='brinde'?'Brinde':'Pendente';const saved=await save('payments',{...p,status,serviceId:matched.id});currentPayments.push(saved);counts.payments++;}else{const exists=currentPayments.some(x=>x.date===p.date&&sameClient(x.client,p.client)&&normalizeText(x.description)===normalizeText(p.description)&&Math.abs(Number(x.value||0)-p.value)<0.01);if(exists){counts.duplicates++;continue;}const saved=await save('payments',{...p,status:normalizeText(p.status)==='pago'?'Pago':p.status});currentPayments.push(saved);counts.payments++;}}
   for(const e of data.expenses){if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.some(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&sameClient(x.category,e.category)));if(exists){counts.duplicates++;continue;}const saved=await save('expenses',e);currentExpenses.push(saved);counts.expenses++;}
   for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
-  stagedExcelImport=null;$('importPreview')?.classList.add('hidden');$('importExcelFile').value='';showToast('Importação concluída. Confira os totais.');$('exportStatus').textContent=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos, ${counts.expenses} despesas e ${counts.appointments} agendamentos. ${counts.duplicates} registro(s) ignorado(s) por possível duplicidade.`;await renderStats();await renderFinancialMovement();
+  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';showToast('Importação concluída. Confira os totais.');$('exportStatus').textContent=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos, ${counts.expenses} despesas e ${counts.appointments} agendamentos. ${counts.duplicates} registro(s) ignorado(s) por possível duplicidade.`;await renderStats();await renderFinancialMovement();
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
 
@@ -1924,7 +1924,7 @@ $('backupBtn').onclick=backupJSON;
 window.addEventListener('beforeinstallprompt',e=>{
  e.preventDefault();
  installPrompt=e;
- $('installBtn')?.classList.remove('hidden');
+ $('installBtn').classList.remove('hidden');
 });
 
 $('installBtn').onclick=async()=>{
@@ -1932,7 +1932,7 @@ $('installBtn').onclick=async()=>{
   installPrompt.prompt();
   await installPrompt.userChoice;
   installPrompt=null;
-  $('installBtn')?.classList.add('hidden');
+  $('installBtn').classList.add('hidden');
  }else{
   showToast('No Chrome, abra o menu ⋮ e escolha Instalar app ou Adicionar à tela inicial.');
  }

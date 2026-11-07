@@ -1,0 +1,43 @@
+AUTO BRILHO WEB - ATUALIZAÇÃO FINAL v8
+
+IMPORTANTE
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- Antes de importar o Excel, o aplicativo baixa automaticamente um backup JSON do banco atual.
+
+ARQUIVOS
+Substitua no repositório os arquivos deste ZIP mantendo a mesma estrutura:
+app.js, index.html, style.css, sw.js, manifest.json, icon-192.png e icon-512.png.
+O arquivo LEIA-ME pode ficar no repositório ou ser ignorado.
+
+NOVIDADES
+- Tela inicial mais limpa, com indicadores principais, atalhos, agendamentos futuros e contas próximas do vencimento.
+- Aba Dashboards com dias trabalhados, média diária, metas de faturamento/serviços, evolução, limites de despesas e resumo de pagamentos de funcionários.
+- Cadastro de vários veículos por cliente, com atalhos para novo serviço e agendamento.
+- Exclusão de cliente com preservação dos serviços/pagamentos históricos (veículos vinculados são removidos).
+- Categorias SUV e Utilitário.
+- Data de cadastramento, histórico e ranking de clientes frequentes.
+- Aba de pagamentos pendentes com atualização do recebimento.
+- Relatório unificado de entradas e saídas, com situação paga/pendente, além de aba específica de contas a pagar na exportação.
+- Alertas de contas que vencem em até dois dias e contas atrasadas.
+- Relatórios em aba própria.
+- Importação de planilhas Excel com prévia, verificação de duplicidades e backup antes de gravar.
+- Lavagem simples e Ducha como sugestões no campo de serviço.
+
+IMPORTAÇÃO DO EXCEL
+1. Publique os arquivos atualizados, preservando config.js.
+2. Abra o Auto Brilho e entre com seu acesso normal.
+3. Abra a aba Relatórios.
+4. Escolha a planilha Excel e confira a prévia.
+5. Confirme somente depois de conferir o arquivo e de salvar o backup JSON baixado.
+6. Após a importação, confira clientes, veículos, serviços, pagamentos e despesas.
+
+OBSERVAÇÕES
+- Placas iniciadas por AAA seguidas de quatro números são preservadas como identificação de serviço sem placa real; não criam veículos.
+- Pagamentos relacionados a serviços são vinculados para evitar duplicar entradas.
+- Contas a pagar e despesas usam o mesmo registro no banco. O importador lê a aba Despesas e também uma eventual aba Contas a pagar, se existir.
+- Metas e limites de gastos ficam guardados neste navegador e são incluídos no backup JSON; não são sincronizados entre aparelhos.
+- Alertas são verificados quando o aplicativo está aberto. Notificações do Android dependem de permissão e de abrir o aplicativo para verificar vencimentos; não há serviço de envio em segundo plano com o aplicativo fechado.
+- Domingos e feriados nacionais fixos são descontados dos dias úteis; feriados móveis e municipais devem ser informados no campo próprio.
+- Dias trabalhados são calculados pelos dias do mês que possuem ao menos um serviço concluído.
+- Datas de cadastro antigas que não constam no Excel serão exibidas como não informadas, sem inventar uma data.
