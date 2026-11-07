@@ -1512,6 +1512,7 @@ async function enterApp(){
   renderTabs();
   renderSection();
   await renderStats();
+  await checkPayablesNotifications();
   subscribeRealtime();
  }finally{
   appEntering=false;
@@ -1823,27 +1824,95 @@ function setLocalSettings(v){localStorage.setItem('autoBrilhoSettings',JSON.stri
 function monthWorkingDays(year,month,holidays=[]){let n=0;const fixed=['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25'].map(x=>year+'-'+x);const excluded=[...new Set([...fixed,...holidays])];const d=new Date(year,month-1,1);while(d.getMonth()===month-1){const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');if(d.getDay()!==0&&!excluded.includes(iso))n++;d.setDate(d.getDate()+1);}return n;}
 function isDueAlert(e){if(!e.dueDate||!['Em aberto','Pendente'].includes(e.paymentStatus))return false;const today=new Date(localISODate()+'T00:00:00'),due=new Date(e.dueDate+'T00:00:00');return Math.round((due-today)/86400000)<=2;}
 async function closeDueNotificationsIfClear(){try{const expenses=await all('expenses');if(!expenses.some(isDueAlert)&&navigator.serviceWorker?.ready){const reg=await navigator.serviceWorker.ready;const notes=await reg.getNotifications({tag:'auto-brilho-payables'});notes.forEach(n=>n.close());}}catch(e){}}
+
+async function checkPayablesNotifications(){
+ try{
+  const settings=getLocalSettings();
+  if(!settings.dueNotificationsEnabled||!('Notification'in window)||Notification.permission!=='granted')return;
+  const expenses=await all('expenses');
+  const alerts=expenses.filter(isDueAlert);
+  const reg=await navigator.serviceWorker?.ready;
+  if(!reg)return;
+  const existing=await reg.getNotifications({tag:'auto-brilho-payables'});
+  if(!alerts.length){
+   existing.forEach(n=>n.close());
+   localStorage.removeItem('ab-due-signature');
+   return;
+  }
+  const signature=alerts.map(e=>`${e.id}:${e.dueDate||''}`).sort().join('|');
+  if(localStorage.getItem('ab-due-signature')===signature)return;
+  existing.forEach(n=>n.close());
+  const overdue=alerts.filter(e=>String(e.dueDate||'')<localISODate()).length;
+  const dueSoon=alerts.length-overdue;
+  const summary=[
+   overdue?`${overdue} vencida(s)`: '',
+   dueSoon?`${dueSoon} com vencimento em até 2 dias`: ''
+  ].filter(Boolean).join(' · ');
+  await reg.showNotification('Auto Brilho: atenção às contas a pagar',{
+   body:`${summary}. Consulte a aba Contas a pagar.`,
+   tag:'auto-brilho-payables',
+   renotify:false
+  });
+  localStorage.setItem('ab-due-signature',signature);
+ }catch(err){console.warn('Não foi possível verificar notificações de vencimento:',err);}
+}
+
+async function renderPayablesWithNotificationSettings(){
+ await originalRenderPayablesTable();
+ const target=$('tableWrap');
+ if(!target)return;
+ const settings=getLocalSettings();
+ const enabled=!!settings.dueNotificationsEnabled;
+ const panel=document.createElement('section');
+ panel.className='dashboard-chart-panel due-notification-settings';
+ panel.innerHTML=`<h3>Notificações de vencimento</h3>
+  <p>Ative para receber um aviso quando qualquer conta estiver vencendo nos próximos 2 dias ou já estiver atrasada. O aviso considera todas as contas em aberto e é atualizado quando uma conta é paga.</p>
+  <div class="form-actions"><button type="button" class="${enabled?'secondary':'primary'}" id="toggleDueNotifications">${enabled?'Desativar notificações':'Ativar notificações'}</button><span class="muted small" id="dueNotificationStatus">${enabled?'Ativadas neste aparelho':'Desativadas neste aparelho'}</span></div>`;
+ target.prepend(panel);
+ const button=$('toggleDueNotifications');
+ button.onclick=async()=>{
+  if(!('Notification'in window)){showToast('Este navegador não oferece notificações.');return;}
+  const current=getLocalSettings();
+  if(current.dueNotificationsEnabled){
+   setLocalSettings({...current,dueNotificationsEnabled:false});
+   const reg=await navigator.serviceWorker?.ready;
+   if(reg){const notes=await reg.getNotifications({tag:'auto-brilho-payables'});notes.forEach(n=>n.close());}
+   localStorage.removeItem('ab-due-signature');
+   button.textContent='Ativar notificações';button.className='primary';
+   $('dueNotificationStatus').textContent='Desativadas neste aparelho';
+   showToast('Notificações de vencimento desativadas.');
+   return;
+  }
+  const permission=await Notification.requestPermission();
+  if(permission!=='granted'){showToast('Permissão de notificação não concedida.');return;}
+  setLocalSettings({...current,dueNotificationsEnabled:true});
+  button.textContent='Desativar notificações';button.className='secondary';
+  $('dueNotificationStatus').textContent='Ativadas neste aparelho';
+  localStorage.removeItem('ab-due-signature');
+  await checkPayablesNotifications();
+  showToast('Notificações ativadas para todas as contas a pagar.');
+ };
+ await checkPayablesNotifications();
+}
+
 async function addDashboardExtras(){
  const target=$('tableWrap');if(!target||active!=='dashboard')return;
  try{const [services,expenses]=await Promise.all([all('services'),all('expenses')]);const now=new Date(),year=now.getFullYear(),month=now.getMonth()+1,key=year+'-'+String(month).padStart(2,'0');const done=services.filter(s=>s.status==='Concluído'&&s.date?.slice(0,7)===key);const days=[...new Set(done.map(s=>s.date))];const revenue=done.reduce((n,s)=>n+Number(s.value||0),0);const avgTicket=done.length?revenue/done.length:0;const settings=getLocalSettings();const holidays=(settings.holidays||'').split(',').map(x=>x.trim()).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));const workdays=monthWorkingDays(year,month,holidays);const dailyTarget=Number(settings.dailyTarget||0);const targetRevenue=dailyTarget*workdays;const targetServices=avgTicket>0?Math.ceil(targetRevenue/avgTicket):0;const alerts=expenses.filter(isDueAlert);if(!alerts.length)await closeDueNotificationsIfClear();const cats=['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo'];const caps=settings.caps||{};const paidExpenses=expenses.filter(e=>e.paymentStatus==='Pago'&&e.date?.slice(0,7)===key);const byCat=cats.map(c=>({c,total:paidExpenses.filter(e=>e.category===c).reduce((n,e)=>n+Number(e.value||0),0)}));const staff=paidExpenses.filter(e=>e.category==='Funcionários');const staffGroups={};staff.forEach(e=>{const k=e.supplier||e.subcategory||e.description||'Não identificado';staffGroups[k]=(staffGroups[k]||0)+Number(e.value||0);});
  const holidayText=settings.holidays||'';
- const html=`<div class="dashboard-chart-panel"><h3>Metas do mês</h3><p>Domingos e feriados cadastrados são descontados dos dias úteis. Feriados móveis/locais devem ser informados manualmente.</p><button class="action" type="button" id="enableDueNotificationsTop">Ativar notificações de vencimento</button><form id="goalForm" class="form-grid"><div class="field"><label>Meta média diária (R$)</label><input name="dailyTarget" type="number" min="0" step="0.01" value="${esc(settings.dailyTarget||'')}" placeholder="Ex.: 350"></div><div class="field"><label>Feriados do mês (AAAA-MM-DD, separados por vírgula)</label><input name="holidays" value="${esc(holidayText)}" placeholder="2026-11-20"></div><div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar meta e feriados</button></div></form><div class="dashboard-metrics"><div class="dashboard-metric"><span>Dias úteis previstos</span><strong>${workdays}</strong></div><div class="dashboard-metric"><span>Dias trabalhados (dias com serviço concluído)</span><strong>${days.length}</strong></div><div class="dashboard-metric"><span>Média diária realizada</span><strong>${money(days.length?revenue/days.length:0)}</strong></div><div class="dashboard-metric"><span>Meta de faturamento</span><strong>${money(targetRevenue)}</strong><small>${targetRevenue?Math.min(100,revenue/targetRevenue*100).toFixed(1).replace('.',',')+'% atingido':'Informe uma meta diária'}</small></div><div class="dashboard-metric"><span>Meta estimada de serviços</span><strong>${targetServices||'—'}</strong><small>Ticket médio atual: ${money(avgTicket)}</small></div><div class="dashboard-metric"><span>Serviços concluídos</span><strong>${done.length}</strong><small>${targetServices?Math.min(100,done.length/targetServices*100).toFixed(1).replace('.',',')+'% da meta':'Meta indisponível'}</small></div></div></div>
+ const html=`<div class="dashboard-chart-panel"><h3>Metas do mês</h3><p>Domingos e feriados cadastrados são descontados dos dias úteis. Feriados móveis/locais devem ser informados manualmente.</p><form id="goalForm" class="form-grid"><div class="field"><label>Meta média diária (R$)</label><input name="dailyTarget" type="number" min="0" step="0.01" value="${esc(settings.dailyTarget||'')}" placeholder="Ex.: 350"></div><div class="field"><label>Feriados do mês (AAAA-MM-DD, separados por vírgula)</label><input name="holidays" value="${esc(holidayText)}" placeholder="2026-11-20"></div><div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar meta e feriados</button></div></form><div class="dashboard-metrics"><div class="dashboard-metric"><span>Dias úteis previstos</span><strong>${workdays}</strong></div><div class="dashboard-metric"><span>Dias trabalhados (dias com serviço concluído)</span><strong>${days.length}</strong></div><div class="dashboard-metric"><span>Média diária realizada</span><strong>${money(days.length?revenue/days.length:0)}</strong></div><div class="dashboard-metric"><span>Meta de faturamento</span><strong>${money(targetRevenue)}</strong><small>${targetRevenue?Math.min(100,revenue/targetRevenue*100).toFixed(1).replace('.',',')+'% atingido':'Informe uma meta diária'}</small></div><div class="dashboard-metric"><span>Meta estimada de serviços</span><strong>${targetServices||'—'}</strong><small>Ticket médio atual: ${money(avgTicket)}</small></div><div class="dashboard-metric"><span>Serviços concluídos</span><strong>${done.length}</strong><small>${targetServices?Math.min(100,done.length/targetServices*100).toFixed(1).replace('.',',')+'% da meta':'Meta indisponível'}</small></div></div></div>
  <div class="dashboard-chart-panel"><h3>Teto de gastos por categoria</h3><p>Defina o limite percentual sobre o faturamento do mês. Os limites ficam salvos neste navegador.</p><form id="capsForm" class="form-grid">${cats.map(c=>`<div class="field"><label>${esc(c)} (%)</label><input type="number" min="0" max="100" step="0.1" name="${esc(c)}" value="${esc(caps[c]??'')}" placeholder="Sem limite"></div>`).join('')}<div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar limites</button></div></form><div class="table-scroll"><table><thead><tr><th>Categoria</th><th>Gasto no mês</th><th>% do faturamento</th><th>Teto</th></tr></thead><tbody>${byCat.map(x=>{const pct=revenue?x.total/revenue*100:null,cap=Number(caps[x.c]||0);return `<tr><td>${esc(x.c)}</td><td>${money(x.total)}</td><td>${pct===null?'—':pct.toFixed(1).replace('.',',')+'%'}</td><td>${cap?cap+'%':'Não definido'} ${cap&&pct>cap?'⚠ Acima do teto':''}</td></tr>`}).join('')}</tbody></table></div></div>
  <div class="dashboard-chart-panel"><h3>Resumo de pagamentos de funcionários</h3><p>Despesas pagas na categoria Funcionários neste mês.</p>${Object.keys(staffGroups).length?`<div class="table-scroll"><table><thead><tr><th>Funcionário / descrição</th><th>Total pago</th></tr></thead><tbody>${Object.entries(staffGroups).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${money(v)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum pagamento de funcionário registrado neste mês.</p>'}</div>
- ${alerts.length?`<div class="alert-panel"><strong>Contas próximas do vencimento ou vencidas</strong>${alerts.map(e=>`<p>${dateBR(e.dueDate)} · ${esc(e.description)} · ${money(e.value)}</p>`).join('')}<button class="action" id="goPayables">Abrir contas a pagar</button> <button class="action" id="enableDueNotifications">Ativar notificações</button></div>`:''}`;
+ ${alerts.length?`<div class="alert-panel"><strong>Contas próximas do vencimento ou vencidas</strong>${alerts.map(e=>`<p>${dateBR(e.dueDate)} · ${esc(e.description)} · ${money(e.value)}</p>`).join('')}<button class="action" id="goPayables">Abrir contas a pagar</button></div>`:''}`;
  target.insertAdjacentHTML('beforeend',html);
- if($('enableDueNotificationsTop'))$('enableDueNotificationsTop').onclick=async()=>{if(!('Notification'in window)){showToast('Este navegador não oferece notificações.');return;}const permission=await Notification.requestPermission();showToast(permission==='granted'?'Notificações ativadas. Abra o aplicativo diariamente para verificar vencimentos.':'Permissão não concedida.');};
  $('goalForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());const old=getLocalSettings();setLocalSettings({...old,dailyTarget:Number(d.dailyTarget||0),holidays:d.holidays||''});showToast('Meta salva neste aparelho.');renderDashboards();};
  $('capsForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());const old=getLocalSettings();old.caps={};cats.forEach(c=>{if(d[c]!=='')old.caps[c]=Number(d[c]);});setLocalSettings(old);showToast('Limites salvos neste aparelho.');renderDashboards();};
  if($('goPayables'))$('goPayables').onclick=()=>{active='payables';renderTabs();renderSection();};
- if($('enableDueNotifications'))$('enableDueNotifications').onclick=async()=>{if(!('Notification'in window)){showToast('Este navegador não oferece notificações.');return;}const permission=await Notification.requestPermission();showToast(permission==='granted'?'Notificações ativadas. Abra o aplicativo diariamente para verificar vencimentos.':'Permissão de notificação não concedida.');};
- if(alerts.length&&'Notification'in window&&Notification.permission==='granted'){
-  const unseen=alerts.filter(e=>!localStorage.getItem('ab-notified-'+e.id));
-  if(unseen.length&&navigator.serviceWorker?.ready){navigator.serviceWorker.ready.then(reg=>reg.showNotification('Auto Brilho: conta a vencer',{body:unseen.length+' conta(s) vencem em até 2 dias ou estão atrasadas.',tag:'auto-brilho-payables'})).catch(()=>{});unseen.forEach(e=>localStorage.setItem('ab-notified-'+e.id,'1'));}
- }
+ await checkPayablesNotifications();
  }catch(err){console.error('Extras do painel:',err);}
 }
 renderDashboards=async function(){await originalRenderDashboards();await addDashboardExtras();};
+const originalRenderPayablesTable=renderPayablesTable;
+renderPayablesTable=renderPayablesWithNotificationSettings;
 renderStats=async function(){
  try{const [clients,services,payments,expenses]=await Promise.all([all('clients'),all('services'),all('payments'),all('expenses')]);const key=localISODate().slice(0,7);const done=services.filter(s=>s.status==='Concluído'&&s.date?.slice(0,7)===key);const received=payments.filter(p=>p.status==='Pago'&&p.date?.slice(0,7)===key).reduce((n,p)=>n+Number(p.value||0),0);const pending=payments.filter(p=>p.status==='Pendente').reduce((n,p)=>n+Number(p.value||0),0);const spent=expenses.filter(e=>e.paymentStatus==='Pago'&&e.date?.slice(0,7)===key).reduce((n,e)=>n+Number(e.value||0),0);
  $('stats').innerHTML=`<div class="stat"><div class="label">Recebido no mês</div><div class="value">${money(received)}</div></div><div class="stat"><div class="label">Serviços concluídos</div><div class="value">${done.length}</div></div><div class="stat"><div class="label">Pagamentos pendentes</div><div class="value">${money(pending)}</div></div><div class="stat"><div class="label">Clientes cadastrados</div><div class="value">${clients.length}</div></div><div style="grid-column:1/-1"><button type="button" class="secondary wide" id="dailyCloseBtn">Fechamento do dia</button></div>`;$('dailyCloseBtn').onclick=()=>renderDailyClose();
@@ -1864,7 +1933,7 @@ function excelDate(v){if(v instanceof Date)return v.toISOString().slice(0,10);if
 function rowObjects(ws){const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});return rows;}
 async function stageExcelFile(file){
  if(!window.XLSX)throw new Error('Leitor Excel indisponível.');const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});const get=n=>wb.Sheets[n]?rowObjects(wb.Sheets[n]):[];
- const clients=get('Clientes').map((r,i)=>({r,i})).filter(x=>String(x.r['Nome completo']||'').trim()).map(({r,i})=>({name:String(r['Nome completo']).trim(),phone:String(r['Telefone / WhatsApp']||'').trim(),email:r['E-mail']||'',document:String(r['CPF / CNPJ']||'').trim(),address:r['Endereço']||'',notes:r['Observações']||'',registrationDate:'',importKey:'excel-client-'+i+'-'+normalizeText(r['Nome completo'])}));
+ const clients=get('Clientes').map((r,i)=>({r,i})).filter(x=>String(x.r['Nome completo']||'').trim()).map(({r,i})=>({name:String(r['Nome completo']).trim(),phone:String(r['Telefone / WhatsApp']||'').trim(),email:r['E-mail']||'',document:String(r['CPF / CNPJ']||'').trim(),address:r['Endereço']||'',notes:r['Observações']||'',registrationDate:excelDate(r['Data de cadastro']),importKey:'excel-client-'+i+'-'+normalizeText(r['Nome completo'])}));
  const vehicles=get('Veículos').filter(r=>String(r['Placa']||'').trim()).map(r=>({client:String(r['Cliente']||'').trim(),plate:normalizePlate(r['Placa']),type:String(r['Tipo de veículo']||'Outro').trim(),brand:String(r['Marca']||'').trim(),model:String(r['Modelo']||'').trim(),color:String(r['Cor']||'').trim(),notes:r['Observações']||''}));
  const services=get('Serviços realizados').map((r,i)=>({r,i})).filter(x=>String(x.r['Data']||'').trim()&&String(x.r['Cliente']||'').trim()).map(({r,i})=>({importKey:'excel-service-'+i,date:excelDate(r['Data']),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Concluído').trim(),paymentStatus:String(r['Situação financeira']||'').trim()==='Recebido'?'Recebido':'Pendente',paymentMethod:String(r['Tipo de pagamento']||'').trim(),notes:String(r['Observações']||'').trim()}));
  const payments=get('Receitas e pagamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Descrição']||'').trim()).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim(),description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
@@ -1892,6 +1961,28 @@ async function importStagedExcel(){
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
 
+
+function downloadImportTemplate(){
+ if(!window.XLSX){showToast('Biblioteca Excel indisponível.');return;}
+ const wb=XLSX.utils.book_new();
+ const sheets=[
+  ['Clientes',['Nome completo','Telefone / WhatsApp','Data de cadastro','E-mail','CPF / CNPJ','Endereço','Observações']],
+  ['Veículos',['Cliente','Placa','Tipo de veículo','Marca','Modelo','Cor','Observações']],
+  ['Serviços realizados',['Data','Cliente','Veículo / placa','Serviço executado','Valor (R$)','Situação','Situação financeira','Tipo de pagamento','Observações']],
+  ['Receitas e pagamentos',['Data','Cliente','Descrição','Forma de pagamento','Valor (R$)','Situação','Observações']],
+  ['Despesas',['Data do pagamento','Data de vencimento','Categoria','Subcategoria','Descrição','Fornecedor','Valor (R$)','Forma de pagamento','Situação','Observações']],
+  ['Contas a pagar',['Data do pagamento','Data de vencimento','Categoria','Subcategoria','Descrição','Fornecedor','Valor (R$)','Forma de pagamento','Situação','Observações']],
+  ['Agendamentos',['Data','Horário','Cliente','Veículo / placa','Serviço solicitado','Valor (R$)','Situação','Observações']]
+ ];
+ for(const [name,headers] of sheets){
+  const ws=XLSX.utils.aoa_to_sheet([headers]);
+  ws['!cols']=headers.map(h=>({wch:Math.max(16,Math.min(30,h.length+4))}));
+  XLSX.utils.book_append_sheet(wb,ws,name);
+ }
+ XLSX.writeFile(wb,`Modelo_Importacao_Auto_Brilho_${localISODate()}.xlsx`);
+ showToast('Planilha-modelo de importação baixada.');
+}
+
 async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços, incluindo lançamentos sem placa</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li><li>${d.appointments.length} agendamentos</li></ul><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
 
 async function exportExcel(){
@@ -1907,7 +1998,7 @@ async function exportExcel(){
 
 // Inicialização da aba Relatórios e lembretes de vencimento.
 
-$('addBtn').onclick=()=>renderForm();
+$('addBtn').onclick=()=>{if(active==='clients'){renderClientVehicleForm({});return;}renderForm();};
 
 $('refreshBtn').onclick=()=>{
  if(active==='home')renderHomePanel();else if(active==='dashboard')renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else if(active==='reports')renderFinancialMovement();else renderTable();
@@ -1917,6 +2008,7 @@ $('refreshBtn').onclick=()=>{
 
 $('searchInput').addEventListener('input',()=>{if(active==='pending')renderPendingPaymentsTable();else if(active!=='reports')renderTable();});
 
+$('templateBtn').onclick=downloadImportTemplate;
 $('exportBtn').onclick=exportExcel;
 setupExcelImport();
 $('backupBtn').onclick=backupJSON;

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <title>Auto Brilho | Gestão</title>
 </head>
 <body>
@@ -60,6 +60,7 @@
   <section class="panel reports" id="reportsPanel">
    <div class="panel-head"><div><p class="eyebrow">DADOS DO NEGÓCIO</p><h2>Relatórios Excel</h2><p class="muted">Importe seu histórico Excel, confira o movimento financeiro e gere relatórios.</p></div><span class="excel-mark">XLSX</span></div>
    <div class="field"><label for="importExcelFile">Importar histórico de uma planilha Excel (.xlsx ou .xls)</label><input id="importExcelFile" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div>
+   <button id="templateBtn" class="secondary wide" type="button">Baixar planilha-modelo para importação</button>
    <div id="importPreview" class="import-preview hidden"></div>
    <button id="exportBtn" class="primary wide" type="button">Exportar relatórios para Excel</button>
    <button id="backupBtn" class="secondary wide backup-btn" type="button">Baixar backup completo (JSON)</button>
@@ -74,10 +75,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=8').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=9').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
 }
 </script>
 </body>

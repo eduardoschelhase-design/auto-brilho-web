@@ -41,3 +41,13 @@ OBSERVAÇÕES
 - Domingos e feriados nacionais fixos são descontados dos dias úteis; feriados móveis e municipais devem ser informados no campo próprio.
 - Dias trabalhados são calculados pelos dias do mês que possuem ao menos um serviço concluído.
 - Datas de cadastro antigas que não constam no Excel serão exibidas como não informadas, sem inventar uma data.
+
+
+ATUALIZAÇÃO v9 - AJUSTES DE CADASTRO E NOTIFICAÇÕES
+- Na aba Cadastro, o formulário de novo cliente/veículo é aberto somente ao tocar em "+ Novo cliente".
+- A configuração de notificações foi movida para a aba Contas a pagar.
+- A ativação vale para todas as contas em aberto, com aviso a partir de dois dias antes do vencimento e também para contas atrasadas.
+- Quando uma conta é quitada, a notificação é atualizada na próxima verificação do aplicativo.
+- A preferência de notificação fica salva neste aparelho. O navegador precisa conceder permissão.
+- As verificações acontecem quando o aplicativo está aberto e consulta os dados; não há execução em segundo plano com o app fechado.
+- O cache PWA foi atualizado para v9 para solicitar os novos arquivos.
