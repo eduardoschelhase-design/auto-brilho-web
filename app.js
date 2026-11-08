@@ -279,6 +279,9 @@ async function renderPayablesTable(){
 
 // Lançamento de serviço iniciado pela placa do veículo.
 function renderServiceForm(item={}){
+ // Reexibe o contêiner: renderSection o oculta ao trocar de aba.
+ $('formWrap').style.display='';
+ $('formWrap').classList.remove('hidden');
  editId=item.id??null;
  const initialPlate=normalizePlate(item.vehicle||'');
  const initialDate=item.date||new Date().toISOString().slice(0,10);
