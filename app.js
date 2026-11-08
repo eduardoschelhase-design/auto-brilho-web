@@ -411,12 +411,14 @@ function renderServiceForm(item={}){
 async function syncServicePayment(service){
  const payments=await all('payments');
  const existing=payments.find(p=>p.serviceId===service.id);
- const method=service.paymentMethod||'';
- const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?'Pago':'Pendente';
- // A data do serviço e a data do recebimento são eventos diferentes.
- // Para recebimentos, usa a data informada no serviço; para pendências,
- // mantém a data do serviço apenas como referência na lista de pendentes.
- const paymentDate=status==='Pago'?(service.receivedDate||localISODate()):service.date;
+ const method=service.paymentMethod||'Outro';
+ const isGift=normalizeText(method)==='brinde';
+ const isReceived=normalizeText(service.paymentStatus)==='recebido';
+ const status=isGift?'Brinde':isReceived?'Pago':'Pendente';
+ // Para serviços importados do histórico, o usuário confirmou que a data
+ // do serviço deve ser considerada também como data do recebimento.
+ // Nos lançamentos manuais, preserva-se a data de recebimento informada.
+ const paymentDate=status==='Pago'?(service.receivedDate||(service.importKey?service.date:localISODate())):service.date;
  const payment={
   ...(existing?{id:existing.id}:{}),
   serviceId:service.id,date:paymentDate,client:service.client,
@@ -425,6 +427,44 @@ async function syncServicePayment(service){
   notes:service.notes||''
  };
  await save('payments',payment);
+}
+
+function canonicalImportedServiceStatus(value){
+ const v=normalizeText(value);
+ if(['concluido','concluida','finalizado','finalizada','feito','realizado','realizada'].includes(v))return 'Concluído';
+ if(['em andamento','andamento','em execucao','execucao'].includes(v))return 'Em andamento';
+ if(['cancelado','cancelada','cancelamento'].includes(v))return 'Cancelado';
+ return String(value||'Concluído').trim();
+}
+
+function canonicalImportedExpenseStatus(value){
+ const v=normalizeText(value);
+ if(['pago','paga','quitado','quitada','liquidado','liquidada','pago integralmente','quitada integralmente'].includes(v))return 'Pago';
+ // Qualquer situação não reconhecida permanece em aberto; nunca presume quitação.
+ return 'Em aberto';
+}
+
+async function reconcileImportedServicePayments(){
+ const services=await all('services');
+ let created=0,normalized=0;
+ for(const original of services){
+  // importKey é gravado somente pelo importador Excel; não altera serviços manuais.
+  if(!original.importKey)continue;
+  const canonicalStatus=canonicalImportedServiceStatus(original.status);
+  let service=original;
+  if(canonicalStatus!==original.status){
+   service=await save('services',{...original,status:canonicalStatus});
+   normalized++;
+  }
+  if(canonicalStatus!=='Concluído'||normalizeText(service.paymentStatus)!=='recebido')continue;
+  const payments=await all('payments');
+  if(payments.some(p=>p.serviceId===service.id))continue;
+  service={...service,receivedDate:service.receivedDate||service.date};
+  await save('services',service);
+  await syncServicePayment(service);
+  created++;
+ }
+ return {created,normalized};
 }
 
 async function cancelLinkedServicePayment(serviceId){
@@ -1539,6 +1579,13 @@ async function enterApp(){
  appEntering=true;
  try{
   showApp(true);
+  try{
+   const reconciliation=await reconcileImportedServicePayments();
+   if(reconciliation.created>0)showToast(`${reconciliation.created} recebimento(s) de serviços importados conciliado(s) na data do serviço.`);
+  }catch(reconcileError){
+   console.error('Falha ao conciliar serviços importados:',reconcileError);
+   showToast('Não foi possível concluir a conciliação financeira dos serviços importados. Tente novamente.');
+  }
   renderTabs();
   renderSection();
   await renderStats();
@@ -1980,9 +2027,9 @@ async function stageExcelFile(file){
  if(!window.XLSX)throw new Error('Leitor Excel indisponível.');const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});const get=n=>wb.Sheets[n]?rowObjects(wb.Sheets[n]):[];
  const clients=get('Clientes').map((r,i)=>({r,i})).filter(x=>String(x.r['Nome completo']||'').trim()).map(({r,i})=>({name:String(r['Nome completo']).trim(),phone:String(r['Telefone / WhatsApp']||'').trim(),email:r['E-mail']||'',document:String(r['CPF / CNPJ']||'').trim(),address:r['Endereço']||'',notes:r['Observações']||'',registrationDate:excelDate(r['Data de cadastro']),importKey:'excel-client-'+i+'-'+normalizeText(r['Nome completo'])}));
  const vehicles=get('Veículos').filter(r=>String(r['Placa']||'').trim()).map(r=>({client:String(r['Cliente']||'').trim(),plate:normalizePlate(r['Placa']),type:String(r['Tipo de veículo']||'Outro').trim(),brand:String(r['Marca']||'').trim(),model:String(r['Modelo']||'').trim(),color:String(r['Cor']||'').trim(),notes:r['Observações']||''}));
- const services=get('Serviços realizados').map((r,i)=>({r,i})).filter(x=>String(x.r['Data']||'').trim()&&String(x.r['Cliente']||'').trim()).map(({r,i})=>({importKey:'excel-service-'+i,date:excelDate(r['Data']),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),_valueProvided:String(r['Valor (R$)']??'').trim()!=='',status:String(r['Situação']||'Concluído').trim(),paymentStatus:normalizeText(r['Situação financeira'])==='recebido'?'Recebido':'Pendente',paymentMethod:String(r['Tipo de pagamento']||'').trim(),notes:String(r['Observações']||'').trim()}));
+ const services=get('Serviços realizados').map((r,i)=>({r,i})).filter(x=>String(x.r['Data']||'').trim()&&String(x.r['Cliente']||'').trim()).map(({r,i})=>({importKey:'excel-service-'+i,date:excelDate(r['Data']),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),_valueProvided:String(r['Valor (R$)']??'').trim()!=='',status:canonicalImportedServiceStatus(r['Situação']||'Concluído'),paymentStatus:['recebido','pago','quitado','quitada'].includes(normalizeText(r['Situação financeira']))?'Recebido':'Pendente',paymentMethod:String(r['Tipo de pagamento']||'').trim(),notes:String(r['Observações']||'').trim()}));
  const payments=get('Receitas e pagamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Descrição']||'').trim()).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim(),description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
- const expenseRows=get('Despesas');const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&String(d['Valor (R$)'])===String(p['Valor (R$)'])&&String(d['Data de vencimento']||d['Data do pagamento']||'')===String(p['Data de vencimento']||p['Data do pagamento']||'')));const expenses=[...expenseRows,...payableRows].map((r,i)=>({r,i})).filter(x=>String(x.r['Descrição']||'').trim()).map(({r,i})=>({importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:excelDate(r['Data de vencimento']),category:String(r['Categoria']||'Diversos').trim(),subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:normalizeText(r['Situação'])==='pago'?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()}));
+ const expenseRows=get('Despesas');const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&String(d['Valor (R$)'])===String(p['Valor (R$)'])&&String(d['Data de vencimento']||d['Data do pagamento']||'')===String(p['Data de vencimento']||p['Data do pagamento']||'')));const expenses=[...expenseRows,...payableRows].map((r,i)=>({r,i})).filter(x=>String(x.r['Descrição']||'').trim()).map(({r,i})=>({importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:excelDate(r['Data de vencimento']),category:String(r['Categoria']||'Diversos').trim(),subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:canonicalImportedExpenseStatus(r['Situação']),notes:String(r['Observações']||'').trim()}));
  const appointments=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
  return {clients,vehicles,services,payments,expenses,appointments};
 }
@@ -2002,7 +2049,9 @@ async function importStagedExcel(){
   for(const p of data.payments){let matched=null;const plate=(p.description.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2,3}/i)||[])[0]||'';matched=currentServices.find(s=>s.date===p.date&&sameClient(s.client,p.client)&&Math.abs(Number(s.value||0)-p.value)<0.01&&(!plate||normalizePlate(s.vehicle)===normalizePlate(plate)));if(matched){const old=currentPayments.find(x=>x.serviceId===matched.id);if(old){counts.duplicates++;continue;}const status=normalizeText(p.status)==='pago'?'Pago':normalizeText(p.status)==='brinde'?'Brinde':'Pendente';const saved=await save('payments',{...p,status,serviceId:matched.id});currentPayments.push(saved);counts.payments++;}else{const exists=currentPayments.some(x=>x.date===p.date&&sameClient(x.client,p.client)&&normalizeText(x.description)===normalizeText(p.description)&&Math.abs(Number(x.value||0)-p.value)<0.01);if(exists){counts.duplicates++;continue;}const saved=await save('payments',{...p,status:normalizeText(p.status)==='pago'?'Pago':p.status});currentPayments.push(saved);counts.payments++;}}
   for(const e of data.expenses){if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.some(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&sameClient(x.category,e.category)));if(exists){counts.duplicates++;continue;}const saved=await save('expenses',e);currentExpenses.push(saved);counts.expenses++;}
   for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
-  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos, ${counts.expenses} despesas e ${counts.appointments} agendamentos. ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
+  const reconciliation=await reconcileImportedServicePayments();
+  counts.payments+=reconciliation.created;
+  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos (incluindo ${reconciliation.created} recebimento(s) conciliado(s) automaticamente), ${counts.expenses} despesas e ${counts.appointments} agendamentos. ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s); ${reconciliation.created} recebimento(s) conciliado(s).`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
 
