@@ -1,35 +1,114 @@
-AUTO BRILHO WEB - CONCILIAÇÃO FINANCEIRA E NORMALIZAÇÃO DE DESPESAS v16
+AUTO BRILHO WEB - INTEGRAÇÃO FINANCEIRA AUTOMÁTICA v14
 
 IMPORTANTE
-- Este pacote NÃO contém config.js. Preserve o config.js já publicado no GitHub Pages.
-- Não apague nem substitua o projeto Supabase e NÃO execute SQL para esta atualização.
-- A atualização não exclui registros existentes.
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- Os registros existentes serão preservados. Não há migração destrutiva.
 
-CORREÇÕES v16
-- Mantém a correção v15: serviços históricos importados marcados como Concluído e Recebido geram o recebimento vinculado que estiver faltando, usando a data do serviço conforme confirmado.
-- Mantém a prevenção de pagamentos duplicados por vínculo com o serviço.
-- Corrige a interpretação da situação das despesas na importação Excel: Pago/Paga, Quitado/Quitada e Liquidado/Liquidada são reconhecidos como Pago.
-- Situações não reconhecidas são mantidas como Em aberto. O sistema não presume que uma despesa foi quitada.
-- Despesas são gravadas diretamente na tabela de despesas, que já alimenta Contas a pagar, Movimento financeiro, dashboards e relatórios. Diferentemente dos serviços, não precisam gerar um segundo lançamento em outra tabela.
-- O cache PWA foi atualizado para v16.
+NOVIDADES v14
+- Ao concluir um serviço e marcar o pagamento como Recebido, o sistema cria/atualiza automaticamente uma única receita vinculada ao serviço.
+- A data do recebimento é sugerida como hoje e pode ser alterada antes de salvar.
+- Serviços concluídos com pagamento Pendente geram um registro pendente, sem somar como dinheiro recebido.
+- Ao quitar um pagamento pendente vinculado a um serviço, a situação do serviço e a receita são atualizadas em conjunto, usando a data atual.
+- Alterações posteriores de valor, forma de pagamento ou data atualizam a mesma receita vinculada, evitando duplicidade.
+- Ao cancelar ou reabrir o serviço, o recebimento vinculado deixa de ser contabilizado como pago.
+- A evolução financeira agora separa Faturamento (data do serviço), Recebido (data do recebimento) e Despesas (data do pagamento).
+- O saldo mensal do painel passa a refletir recebimentos efetivos menos despesas pagas.
+- Cache PWA atualizado para v14.
 
-DATAS E CONTABILIZAÇÃO
-- Despesa paga: informe a Data do pagamento para que seja considerada no mês correto nos relatórios e indicadores.
-- Despesa em aberto: informe a Data de vencimento; ela permanece em Contas a pagar e não entra no total de despesas pagas.
-- O aplicativo não inventa uma data de pagamento quando ela não foi informada.
+ATENÇÃO SOBRE SERVIÇOS ANTIGOS
+- Serviços importados anteriormente não terão uma data de recebimento inventada.
+- Para conciliar um serviço antigo como recebido, informe a data real do recebimento ao editar o serviço; se houver uma planilha histórica de Receitas e pagamentos com as datas reais, ela pode ser importada para conciliação.
+- Não reimporte os serviços já cadastrados apenas para ativar esta melhoria.
 
 COMO ATUALIZAR PELO CELULAR
-1. Baixe e extraia este ZIP.
-2. No GitHub, abra o repositório auto-brilho-web e substitua os arquivos correspondentes, mantendo a mesma estrutura.
-3. NÃO substitua nem apague config.js. Ele não está incluído neste pacote.
-4. Aguarde a publicação do GitHub Pages.
-5. Feche completamente o Auto Brilho e abra novamente. Entre com seu acesso normal.
-6. Confira Receitas e pagamentos, Despesas, Contas a pagar, Dashboards e Relatórios.
-
-SEGURANÇA
-- Faça um backup JSON antes da atualização, como precaução normal.
-- Não é necessário reimportar clientes ou serviços já importados.
-- Não execute SQL nem apague dados do Supabase.
+1. Extraia este ZIP.
+2. No GitHub, abra o repositório auto-brilho-web e substitua os arquivos correspondentes mantendo a mesma estrutura.
+3. NÃO substitua nem apague config.js. Ele não está incluído neste ZIP.
+4. Aguarde o GitHub Pages publicar a atualização.
+5. Feche completamente o Auto Brilho e abra novamente. Se ainda aparecer a versão antiga, atualize a página no navegador e abra o app outra vez.
+6. Faça um teste com um serviço de valor pequeno: conclua, marque Recebido, confira a data sugerida e salve. Depois verifique Recebido no mês, Relatórios e a evolução financeira.
 
 ARQUIVOS DO PACOTE
 app.js, index.html, style.css, sw.js, manifest.json, icon-192.png, icon-512.png e este LEIA-ME.
+
+AUTO BRILHO WEB - CORREÇÃO DA IMPORTAÇÃO v13
+
+IMPORTANTE
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- A importação continua fazendo backup JSON antes de gravar.
+
+CORREÇÕES v13
+- Leitura de datas do Excel em formatos como 1/2/2026, 01/02/2026, 2026-02-01 e datas seriais do Excel.
+- O sistema não contabiliza mais serviços com data/valor inválidos como se fossem duplicados.
+- O resumo informa separadamente serviços importados, duplicados e inválidos.
+- A identificação de duplicidade dos serviços foi corrigida para evitar repetição na reimportação.
+- Após importar serviços, a tela abre a lista de Serviços para conferência imediata.
+- Cache PWA atualizado para v13.
+
+ATUALIZAÇÃO
+1. Extraia o ZIP e substitua no GitHub os arquivos correspondentes, mantendo a mesma estrutura.
+2. NÃO substitua nem apague config.js.
+3. Aguarde o GitHub Pages publicar e feche/reabra o aplicativo.
+4. Confira primeiro a aba Serviços antes de tentar importar novamente.
+
+AUTO BRILHO WEB - ATUALIZAÇÃO v10
+
+IMPORTANTE
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- Antes de importar o Excel, o aplicativo baixa automaticamente um backup JSON do banco atual.
+
+ARQUIVOS
+Substitua no repositório os arquivos deste ZIP mantendo a mesma estrutura:
+app.js, index.html, style.css, sw.js, manifest.json, icon-192.png e icon-512.png.
+O arquivo LEIA-ME pode ficar no repositório ou ser ignorado.
+
+NOVIDADES
+- Tela inicial mais limpa, com indicadores principais, atalhos, agendamentos futuros e contas próximas do vencimento.
+- Aba Dashboards com dias trabalhados, média diária, metas de faturamento/serviços, evolução, limites de despesas e resumo de pagamentos de funcionários.
+- Cadastro de vários veículos por cliente, com atalhos para novo serviço e agendamento.
+- Exclusão de cliente com preservação dos serviços/pagamentos históricos (veículos vinculados são removidos).
+- Categorias SUV e Utilitário.
+- Data de cadastramento, histórico e ranking de clientes frequentes.
+- Aba de pagamentos pendentes com atualização do recebimento.
+- Relatório unificado de entradas e saídas, com situação paga/pendente, além de aba específica de contas a pagar na exportação.
+- Alertas de contas que vencem em até dois dias e contas atrasadas.
+- Relatórios em aba própria.
+- Importação de planilhas Excel com prévia, verificação de duplicidades e backup antes de gravar.
+- Lavagem simples e Ducha como sugestões no campo de serviço.
+
+IMPORTAÇÃO DO EXCEL
+1. Publique os arquivos atualizados, preservando config.js.
+2. Abra o Auto Brilho e entre com seu acesso normal.
+3. Abra a aba Relatórios.
+4. Escolha a planilha Excel e confira a prévia.
+5. Confirme somente depois de conferir o arquivo e de salvar o backup JSON baixado.
+6. Após a importação, confira clientes, veículos, serviços, pagamentos e despesas.
+
+OBSERVAÇÕES
+- Placas iniciadas por AAA seguidas de quatro números são preservadas como identificação de serviço sem placa real; não criam veículos.
+- Pagamentos relacionados a serviços são vinculados para evitar duplicar entradas.
+- Contas a pagar e despesas usam o mesmo registro no banco. O importador lê a aba Despesas e também uma eventual aba Contas a pagar, se existir.
+- Metas e limites de gastos ficam guardados neste navegador e são incluídos no backup JSON; não são sincronizados entre aparelhos.
+- Alertas são verificados quando o aplicativo está aberto. Notificações do Android dependem de permissão e de abrir o aplicativo para verificar vencimentos; não há serviço de envio em segundo plano com o aplicativo fechado.
+- Domingos e feriados nacionais fixos são descontados dos dias úteis; feriados móveis e municipais devem ser informados no campo próprio.
+- Dias trabalhados são calculados pelos dias do mês que possuem ao menos um serviço concluído.
+- Datas de cadastro antigas que não constam no Excel serão exibidas como não informadas, sem inventar uma data.
+
+
+ATUALIZAÇÃO v9 - AJUSTES DE CADASTRO E NOTIFICAÇÕES
+- Na aba Cadastro, o formulário de novo cliente/veículo é aberto somente ao tocar em "+ Novo cliente".
+- A configuração de notificações foi movida para a aba Contas a pagar.
+- A ativação vale para todas as contas em aberto, com aviso a partir de dois dias antes do vencimento e também para contas atrasadas.
+- Quando uma conta é quitada, a notificação é atualizada na próxima verificação do aplicativo.
+- A preferência de notificação fica salva neste aparelho. O navegador precisa conceder permissão.
+- As verificações acontecem quando o aplicativo está aberto e consulta os dados; não há execução em segundo plano com o app fechado.
+- O cache PWA foi atualizado para v9 para solicitar os novos arquivos.
+
+
+ATUALIZAÇÃO v10 - CORREÇÃO DO FORMULÁRIO DE CADASTRO
+- Ao acessar ou trocar de aba, o conteúdo do formulário anterior é apagado e o contêiner permanece oculto.
+- Os campos de cliente e veículo são criados somente ao tocar em "+ Novo cliente" (ou em uma ação explícita de edição/adição de veículo).
+- Cache PWA atualizado para v10 para solicitar os arquivos novos.
