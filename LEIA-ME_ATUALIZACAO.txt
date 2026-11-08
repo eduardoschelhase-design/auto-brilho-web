@@ -1,4 +1,4 @@
-AUTO BRILHO WEB - ATUALIZAÇÃO FINAL v8
+AUTO BRILHO WEB - ATUALIZAÇÃO v10
 
 IMPORTANTE
 - Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
@@ -51,3 +51,9 @@ ATUALIZAÇÃO v9 - AJUSTES DE CADASTRO E NOTIFICAÇÕES
 - A preferência de notificação fica salva neste aparelho. O navegador precisa conceder permissão.
 - As verificações acontecem quando o aplicativo está aberto e consulta os dados; não há execução em segundo plano com o app fechado.
 - O cache PWA foi atualizado para v9 para solicitar os novos arquivos.
+
+
+ATUALIZAÇÃO v10 - CORREÇÃO DO FORMULÁRIO DE CADASTRO
+- Ao acessar ou trocar de aba, o conteúdo do formulário anterior é apagado e o contêiner permanece oculto.
+- Os campos de cliente e veículo são criados somente ao tocar em "+ Novo cliente" (ou em uma ação explícita de edição/adição de veículo).
+- Cache PWA atualizado para v10 para solicitar os arquivos novos.

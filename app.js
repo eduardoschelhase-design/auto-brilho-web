@@ -1746,6 +1746,10 @@ renderTabs=function(){
 };
 
 renderSection=function(){
+ // Ao entrar/trocar de seção, descarta qualquer formulário anterior.
+ // Os campos de Cadastro só são recriados pelo botão + Novo cliente.
+ $('formWrap').innerHTML='';
+ $('formWrap').classList.add('hidden');
  const reports=active==='reports',home=active==='home',dashboard=active==='dashboard';
  $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
  $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
@@ -1753,7 +1757,7 @@ renderSection=function(){
  const special=home||dashboard||active==='pending';
  $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
  $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':modules[active]?.label||'Gestão';
- $('addBtn').classList.toggle('hidden',special);$('formWrap').classList.add('hidden');
+ $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':'+ Novo '+(modules[active]?.singular||'registro');
  $('searchInput').value='';
