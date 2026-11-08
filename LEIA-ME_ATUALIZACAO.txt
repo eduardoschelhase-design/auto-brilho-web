@@ -1,3 +1,24 @@
+AUTO BRILHO WEB - CORREÇÃO DA IMPORTAÇÃO v13
+
+IMPORTANTE
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- A importação continua fazendo backup JSON antes de gravar.
+
+CORREÇÕES v13
+- Leitura de datas do Excel em formatos como 1/2/2026, 01/02/2026, 2026-02-01 e datas seriais do Excel.
+- O sistema não contabiliza mais serviços com data/valor inválidos como se fossem duplicados.
+- O resumo informa separadamente serviços importados, duplicados e inválidos.
+- A identificação de duplicidade dos serviços foi corrigida para evitar repetição na reimportação.
+- Após importar serviços, a tela abre a lista de Serviços para conferência imediata.
+- Cache PWA atualizado para v13.
+
+ATUALIZAÇÃO
+1. Extraia o ZIP e substitua no GitHub os arquivos correspondentes, mantendo a mesma estrutura.
+2. NÃO substitua nem apague config.js.
+3. Aguarde o GitHub Pages publicar e feche/reabra o aplicativo.
+4. Confira primeiro a aba Serviços antes de tentar importar novamente.
+
 AUTO BRILHO WEB - ATUALIZAÇÃO v10
 
 IMPORTANTE
