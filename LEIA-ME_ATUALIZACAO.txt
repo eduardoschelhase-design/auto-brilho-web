@@ -1,3 +1,37 @@
+AUTO BRILHO WEB - INTEGRAÇÃO FINANCEIRA AUTOMÁTICA v14
+
+IMPORTANTE
+- Este pacote NÃO contém config.js. Preserve o config.js que já está publicado no GitHub Pages.
+- Não apague nem substitua o projeto Supabase e não execute SQL para esta atualização.
+- Os registros existentes serão preservados. Não há migração destrutiva.
+
+NOVIDADES v14
+- Ao concluir um serviço e marcar o pagamento como Recebido, o sistema cria/atualiza automaticamente uma única receita vinculada ao serviço.
+- A data do recebimento é sugerida como hoje e pode ser alterada antes de salvar.
+- Serviços concluídos com pagamento Pendente geram um registro pendente, sem somar como dinheiro recebido.
+- Ao quitar um pagamento pendente vinculado a um serviço, a situação do serviço e a receita são atualizadas em conjunto, usando a data atual.
+- Alterações posteriores de valor, forma de pagamento ou data atualizam a mesma receita vinculada, evitando duplicidade.
+- Ao cancelar ou reabrir o serviço, o recebimento vinculado deixa de ser contabilizado como pago.
+- A evolução financeira agora separa Faturamento (data do serviço), Recebido (data do recebimento) e Despesas (data do pagamento).
+- O saldo mensal do painel passa a refletir recebimentos efetivos menos despesas pagas.
+- Cache PWA atualizado para v14.
+
+ATENÇÃO SOBRE SERVIÇOS ANTIGOS
+- Serviços importados anteriormente não terão uma data de recebimento inventada.
+- Para conciliar um serviço antigo como recebido, informe a data real do recebimento ao editar o serviço; se houver uma planilha histórica de Receitas e pagamentos com as datas reais, ela pode ser importada para conciliação.
+- Não reimporte os serviços já cadastrados apenas para ativar esta melhoria.
+
+COMO ATUALIZAR PELO CELULAR
+1. Extraia este ZIP.
+2. No GitHub, abra o repositório auto-brilho-web e substitua os arquivos correspondentes mantendo a mesma estrutura.
+3. NÃO substitua nem apague config.js. Ele não está incluído neste ZIP.
+4. Aguarde o GitHub Pages publicar a atualização.
+5. Feche completamente o Auto Brilho e abra novamente. Se ainda aparecer a versão antiga, atualize a página no navegador e abra o app outra vez.
+6. Faça um teste com um serviço de valor pequeno: conclua, marque Recebido, confira a data sugerida e salve. Depois verifique Recebido no mês, Relatórios e a evolução financeira.
+
+ARQUIVOS DO PACOTE
+app.js, index.html, style.css, sw.js, manifest.json, icon-192.png, icon-512.png e este LEIA-ME.
+
 AUTO BRILHO WEB - CORREÇÃO DA IMPORTAÇÃO v13
 
 IMPORTANTE

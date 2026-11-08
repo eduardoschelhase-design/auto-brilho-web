@@ -238,7 +238,7 @@ function renderExpenseForm(item={},isPayable=false){
    await save('expenses',data);
    $('formWrap').classList.add('hidden');editId=null;
    showToast(isPayable?'Conta a pagar salva.':'Despesa registrada.');
-   await renderTable();await renderStats();
+   await renderTable();await renderStats();await renderFinancialMovement();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
   finally{submit.disabled=false;}
  };
@@ -315,6 +315,11 @@ function renderServiceForm(item={}){
       <div class="field"><label>Tipo de pagamento *</label><select name="paymentMethod" id="servicePaymentMethod">
        <option value="">Selecione...</option>${paymentMethods.map(o=>`<option ${item.paymentMethod===o?'selected':''}>${o}</option>`).join('')}
       </select></div>
+      <div class="field ${item.paymentStatus==='Recebido'?'':'hidden'}" id="serviceReceivedDateWrap">
+       <label>Data do recebimento *</label>
+       <input name="receivedDate" id="serviceReceivedDate" type="date" value="${esc(item.receivedDate||(!item.id?localISODate():''))}">
+       <small class="muted">Ao marcar como recebido, a data de hoje será sugerida. Você pode alterá-la se necessário.</small>
+      </div>
      </div>
      <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
     </div>
@@ -333,8 +338,18 @@ function renderServiceForm(item={}){
   paymentFields.classList.toggle('hidden',!done);
   $('servicePaymentStatus').required=done;
   $('servicePaymentMethod').required=done;
+  toggleReceivedDate();
+ }
+ function toggleReceivedDate(defaultToToday=false){
+  const received=$('servicePaymentStatus').value==='Recebido';
+  const wrap=$('serviceReceivedDateWrap'),dateInput=$('serviceReceivedDate');
+  wrap.classList.toggle('hidden',!received);
+  dateInput.required=received;
+  if(received&&!dateInput.value&&defaultToToday)dateInput.value=localISODate();
+  if(!received)dateInput.value='';
  }
  if(statusInput)statusInput.addEventListener('change',togglePaymentFields);
+ $('servicePaymentStatus').addEventListener('change',()=>toggleReceivedDate(true));
  togglePaymentFields();
  plateInput.addEventListener('input',()=>{
   const start=plateInput.selectionStart; plateInput.value=normalizePlate(plateInput.value);
@@ -378,13 +393,16 @@ function renderServiceForm(item={}){
    data.vehicle=normalizePlate(data.vehicle);
    if(data.status==='Concluído'){
     if(!data.paymentStatus||!data.paymentMethod)throw new Error('Informe se foi recebido ou pendente e o tipo de pagamento.');
-   }else{delete data.paymentStatus;delete data.paymentMethod;}
+    if(data.paymentStatus==='Recebido'){
+     if(!data.receivedDate)throw new Error('Informe a data em que o pagamento foi recebido.');
+    }else delete data.receivedDate;
+   }else{delete data.paymentStatus;delete data.paymentMethod;delete data.receivedDate;}
    if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
    const saved=await save('services',data);
    if(saved.status==='Concluído')await syncServicePayment(saved);
    else await cancelLinkedServicePayment(saved.id);
    $('formWrap').classList.add('hidden');editId=null;showToast('Serviço salvo na nuvem.');
-   await renderTable();await renderStats();
+   await renderTable();await renderStats();await renderFinancialMovement();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
   finally{submit.disabled=false;}
  };
@@ -395,9 +413,13 @@ async function syncServicePayment(service){
  const existing=payments.find(p=>p.serviceId===service.id);
  const method=service.paymentMethod||'';
  const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?'Pago':'Pendente';
+ // A data do serviço e a data do recebimento são eventos diferentes.
+ // Para recebimentos, usa a data informada no serviço; para pendências,
+ // mantém a data do serviço apenas como referência na lista de pendentes.
+ const paymentDate=status==='Pago'?(service.receivedDate||localISODate()):service.date;
  const payment={
   ...(existing?{id:existing.id}:{}),
-  serviceId:service.id,date:service.date,client:service.client,
+  serviceId:service.id,date:paymentDate,client:service.client,
   description:`Serviço ${service.service||''} - ${service.vehicle||''}`,
   method,value:Number(service.value||0),status,
   notes:service.notes||''
@@ -1023,7 +1045,7 @@ async function renderDashboards(){
     received,
     pending,
     spent,
-    balance:revenue-spent,
+    balance:received-spent,
     completed
    };
   });
@@ -1072,7 +1094,7 @@ async function renderDashboards(){
     variation:dashboardVariation(
      current.balance,previous.balance
     ),
-    description:'Faturamento menos despesas'
+    description:'Recebimentos efetivos menos despesas pagas'
    },
    {
     label:'Despesas / faturamento',
@@ -1093,6 +1115,11 @@ async function renderDashboards(){
      name:'Faturamento',
      color:'#d71920',
      values:rangeMonths.map(m=>m.revenue)
+    },
+    {
+     name:'Recebido',
+     color:'#16794a',
+     values:rangeMonths.map(m=>m.received)
     },
     {
      name:'Despesas',
@@ -1130,7 +1157,7 @@ async function renderDashboards(){
      <div class="dashboard-chart-head">
       <div>
        <h3>Evolução financeira</h3>
-       <p>Receita de serviços concluídos e despesas registradas</p>
+       <p>Faturamento por data do serviço, recebimentos por data do pagamento e despesas pagas</p>
       </div>
 
       <select id="dashboardChartRange"
@@ -1825,7 +1852,7 @@ renderClientVehicleTable=async function(){
 async function renderPendingPaymentsTable(){
  try{const rows=(await all('payments')).filter(p=>p.status==='Pendente');const q=normalizeText($('searchInput').value);const list=rows.filter(p=>!q||normalizeText([p.client,p.description,p.method].join(' ')).includes(q));const total=list.reduce((n,p)=>n+Number(p.value||0),0);
  $('tableWrap').innerHTML=`<div class="dashboard-metrics"><div class="dashboard-metric"><span>Pagamentos pendentes</span><strong>${list.length}</strong></div><div class="dashboard-metric"><span>Total pendente</span><strong>${money(total)}</strong></div></div>${list.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Ação</th></tr></thead><tbody>${list.map(p=>`<tr><td>${dateBR(p.date)}</td><td>${esc(p.client)}</td><td>${esc(p.description)}</td><td>${money(p.value)}</td><td><button class="action" data-settle="${p.id}">Atualizar pagamento</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhum pagamento pendente.</div>'}`;
- $('tableWrap').querySelectorAll('[data-settle]').forEach(b=>b.onclick=async()=>{const p=list.find(x=>x.id===b.dataset.settle);const method=prompt('Forma de pagamento: Pix, Dinheiro, Cartão, Cartão de débito, Cartão de crédito, Transferência ou Outro.','Pix');if(method===null)return;const allowed=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'].find(x=>normalizeText(x)===normalizeText(method));if(!allowed){showToast('Forma de pagamento inválida.');return;}try{const date=localISODate();await save('payments',{...p,status:'Pago',method:allowed,date});if(p.serviceId){const ss=await all('services'),s=ss.find(x=>x.id===p.serviceId);if(s)await save('services',{...s,paymentStatus:'Recebido',paymentMethod:allowed});}showToast('Pagamento atualizado.');await renderPendingPaymentsTable();await renderStats();}catch(err){showToast('Erro ao atualizar: '+err.message);}});
+ $('tableWrap').querySelectorAll('[data-settle]').forEach(b=>b.onclick=async()=>{const p=list.find(x=>x.id===b.dataset.settle);const method=prompt('Forma de pagamento: Pix, Dinheiro, Cartão, Cartão de débito, Cartão de crédito, Transferência ou Outro.','Pix');if(method===null)return;const allowed=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'].find(x=>normalizeText(x)===normalizeText(method));if(!allowed){showToast('Forma de pagamento inválida.');return;}try{const date=localISODate();if(p.serviceId){const ss=await all('services'),s=ss.find(x=>x.id===p.serviceId);if(s){const updated=await save('services',{...s,paymentStatus:'Recebido',paymentMethod:allowed,receivedDate:date});await syncServicePayment(updated);}else{await save('payments',{...p,status:'Pago',method:allowed,date});}}else{await save('payments',{...p,status:'Pago',method:allowed,date});}showToast('Pagamento atualizado e receita conciliada.');await renderPendingPaymentsTable();await renderStats();await renderFinancialMovement();}catch(err){showToast('Erro ao atualizar: '+err.message);}});
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os pagamentos pendentes.</div>';}}
 
 function getLocalSettings(){try{return JSON.parse(localStorage.getItem('autoBrilhoSettings')||'{}')}catch(e){return {}}}
