@@ -81,3 +81,6 @@ button{font-family:inherit}button:focus-visible{outline:2px solid #ff6570;outlin
 .import-preview ul{padding-left:20px;line-height:1.8;font-size:13px}.import-preview .secondary{margin-top:8px}.financial-movement{margin-top:14px}.financial-movement .dashboard-metrics{margin:12px 0}.alert-panel{border-color:#9b6b20;background:#2a2115}.alert-panel strong{display:block;margin-bottom:8px;color:#ffd58b}.alert-panel p{font-size:12px;margin:6px 0;color:#f2e4cb}.reports .field{margin-bottom:12px}.reports input[type=file]{padding:10px}
 @media(max-width:600px){.client-card{padding:12px}.client-actions .action{flex:1 1 auto}.client-vehicle-row{align-items:flex-start}.client-vehicle-row span{min-width:0;overflow-wrap:anywhere}.client-card-head h3{font-size:15px}.financial-movement{padding:10px}.import-preview{padding:12px}}
 .home-quick-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.home-quick-actions button{flex:1 1 135px;min-height:42px}
+
+/* v11: garante que o formulário de cadastro permaneça oculto ao entrar na aba */
+#formWrap.hidden{display:none!important}

@@ -1741,7 +1741,7 @@ renderTabs=function(){
  ];
  $('tabs').innerHTML=tabs.map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
  $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
-  active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap').classList.add('hidden');renderTabs();renderSection();
+  active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap').innerHTML='';$('formWrap').classList.add('hidden');$('formWrap').style.display='none';renderTabs();renderSection();
  });
 };
 
@@ -1750,6 +1750,7 @@ renderSection=function(){
  // Os campos de Cadastro só são recriados pelo botão + Novo cliente.
  $('formWrap').innerHTML='';
  $('formWrap').classList.add('hidden');
+ $('formWrap').style.display='none';
  const reports=active==='reports',home=active==='home',dashboard=active==='dashboard';
  $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
  $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
@@ -1773,6 +1774,7 @@ async function renderHomePanel(){
 
 // Ao adicionar veículo pela ficha, os dados do cliente existente não são recriados.
 renderClientVehicleForm=function(v={}){
+ $('formWrap').style.display='';
  if(!v.addAnother){return originalRenderClientVehicleForm(v);}
  const client=v.clientRecord||{};editId=client.id||v.clientId;editingVehicleId=null;
  const types=['Carro','SUV','Utilitário','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro'];
@@ -2002,7 +2004,7 @@ async function exportExcel(){
 
 // Inicialização da aba Relatórios e lembretes de vencimento.
 
-$('addBtn').onclick=()=>{if(active==='clients'){renderClientVehicleForm({});return;}renderForm();};
+$('addBtn').onclick=()=>{if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
 
 $('refreshBtn').onclick=()=>{
  if(active==='home')renderHomePanel();else if(active==='dashboard')renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else if(active==='reports')renderFinancialMovement();else renderTable();
