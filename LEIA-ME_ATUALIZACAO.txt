@@ -1,4 +1,4 @@
-AUTO BRILHO WEB — ATUALIZAÇÃO CORRETIVA v16
+AUTO BRILHO WEB — ATUALIZAÇÃO CORRETIVA v17
 
 O QUE FOI CORRIGIDO
 - Removida da interface toda a funcionalidade de agendamentos, inclusive o formulário, os indicadores, a importação e a exportação.
@@ -6,7 +6,8 @@ O QUE FOI CORRIGIDO
 - Reduzidas as consultas desnecessárias ao Supabase no carregamento dos painéis.
 - Corrigida a leitura de datas na importação Excel. O formato brasileiro dd/mm/aaaa é reconhecido e validado, além de datas reais do Excel e aaaa-mm-dd.
 - A prévia da importação informa quantos serviços possuem uma data preenchida inválida. Esses registros não são importados até que a data seja corrigida na planilha.
-- Atualizado o cache do aplicativo para evitar que o navegador continue usando arquivos antigos.
+- Corrigida a inicialização do login: o formulário recebe sua ação antes da recuperação da sessão anterior, evitando que o botão Entrar fique sem resposta quando essa recuperação demora. Após autenticar, o painel é aberto diretamente.
+- Atualizado o cache do aplicativo para a versão v17.
 
 IMPORTANTE
 - Este ZIP não contém config.js. Preserve o config.js que já está publicado no GitHub, com as credenciais do Supabase.

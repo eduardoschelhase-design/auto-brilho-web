@@ -1512,6 +1512,34 @@ async function init(){
   window.AUTO_BRILHO_CONFIG.supabaseAnonKey
  );
 
+ // Registra o envio do login antes de tentar recuperar uma sessão anterior.
+ // Assim, uma recuperação de sessão lenta não deixa o botão Entrar sem resposta.
+ $('loginForm').onsubmit=async e=>{
+  e.preventDefault();
+  if(!sbClient){setLoginMessage('Conexão ainda não inicializada. Atualize a página e tente novamente.');return;}
+  const btn=e.target.querySelector('button[type=submit]');
+  btn.disabled=true;
+  setLoginMessage('Verificando acesso...');
+  try{
+   const {data,error}=await sbClient.auth.signInWithPassword({
+    email:$('loginEmail').value.trim(),
+    password:$('loginPassword').value
+   });
+   if(error){
+    console.error('Erro de login:',error);
+    setLoginMessage('Falha no login: '+error.message);
+   }else{
+    setLoginMessage('Acesso autorizado.');
+    if(data?.session) await enterApp();
+   }
+  }catch(err){
+   console.error('Erro ao autenticar:',err);
+   setLoginMessage('Falha de conexão: '+(err.message||'verifique sua internet e tente novamente.'));
+  }finally{
+   btn.disabled=false;
+  }
+ };
+
  const {data:{session},error:sessionError}=await sbClient.auth.getSession();
 
  if(sessionError)console.error('Erro ao recuperar sessão:',sessionError);
@@ -1579,32 +1607,6 @@ async function init(){
   }
  };
 
- $('loginForm').onsubmit=async e=>{
-  e.preventDefault();
-
-  const btn=e.target.querySelector('button[type=submit]');
-  btn.disabled=true;
-  setLoginMessage('Verificando acesso...');
-
-  try{
-   const {error}=await sbClient.auth.signInWithPassword({
-    email:$('loginEmail').value.trim(),
-    password:$('loginPassword').value
-   });
-
-   if(error){
-    console.error('Erro de login:',error);
-    setLoginMessage('Falha no login: '+error.message);
-   }else{
-    setLoginMessage('Acesso autorizado.');
-   }
-  }catch(err){
-   console.error(err);
-   setLoginMessage('Falha de conexão: '+err.message);
-  }finally{
-   btn.disabled=false;
-  }
- };
 
  $('recoveryForm').onsubmit=async e=>{
   e.preventDefault();
