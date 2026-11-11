@@ -1,7 +1,7 @@
 {
   "name": "Auto Brilho - Gestão Automotiva",
   "short_name": "Auto Brilho",
-  "description": "Gestão de clientes, veículos, serviços, agenda e financeiro",
+  "description": "Gestão de clientes, veículos, serviços, financeiro",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
