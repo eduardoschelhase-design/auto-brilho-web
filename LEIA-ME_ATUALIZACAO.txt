@@ -1,27 +1,44 @@
-AUTO BRILHO WEB — ATUALIZAÇÃO CORRETIVA v17
+AUTO BRILHO WEB — ATUALIZAÇÃO CORRETIVA v14.1
 
-O QUE FOI CORRIGIDO
-- Removida da interface toda a funcionalidade de agendamentos, inclusive o formulário, os indicadores, a importação e a exportação.
-- Os registros antigos de agendamentos no Supabase não são apagados. Nenhuma tabela ou dado é excluído.
-- Reduzidas as consultas desnecessárias ao Supabase no carregamento dos painéis.
-- Corrigida a leitura de datas na importação Excel. O formato brasileiro dd/mm/aaaa é reconhecido e validado, além de datas reais do Excel e aaaa-mm-dd.
-- A prévia da importação informa quantos serviços possuem uma data preenchida inválida. Esses registros não são importados até que a data seja corrigida na planilha.
-- Corrigida a inicialização do login: o formulário recebe sua ação antes da recuperação da sessão anterior, evitando que o botão Entrar fique sem resposta quando essa recuperação demora. Após autenticar, o painel é aberto diretamente.
-- Atualizado o cache do aplicativo para a versão v17.
+BASE E SEGURANÇA
+- Esta atualização foi preparada sobre a versão v14.
+- O ZIP NÃO contém config.js. Preserve exatamente o config.js que já está publicado no GitHub.
+- Não execute SQL, não recrie tabelas e não apague dados do Supabase.
+- A atualização não exclui registros. Os agendamentos antigos permanecem no banco; apenas a função/aba de agendamentos deixa de aparecer na interface.
+- Antes de qualquer nova importação, salve o backup JSON gerado pelo aplicativo.
 
-IMPORTANTE
-- Este ZIP não contém config.js. Preserve o config.js que já está publicado no GitHub, com as credenciais do Supabase.
-- Não execute SQL e não recrie tabelas.
-- Antes de importar, gere e guarde um backup JSON.
-- Confira a prévia da importação antes de confirmar.
+CORREÇÕES INCLUÍDAS
+- Leitura paginada do Supabase para carregar todos os registros, inclusive quando há mais de 1.000 por tabela.
+- Importação dos serviços mesmo quando a coluna Cliente está vazia: o sistema procura o proprietário pela placa na aba Veículos.
+- Serviços cuja placa não permite identificar o cliente são preservados com o nome “Não identificado”, mantendo data, placa (se houver), serviço e valor.
+- Reconciliação dos serviços concluídos e recebidos com pagamentos vinculados, evitando criar uma segunda receita quando já existe pagamento vinculado.
+- Data histórica do recebimento importado usa a data do serviço, sem inventar uma data atual para registros antigos.
+- Atualização da data de cadastro de clientes existentes quando ela estiver ausente, sem apagar os demais dados.
+- Padronização de categorias de despesas, incluindo FUNCIONÁRIO, PRÓ-LABORE, MATERIAL e DESPESA MENSAL.
+- Resumo de funcionários reconhece descrições no padrão “PGTO NOME”.
+- Datas de vencimento 01/01/3000 são tratadas como sem vencimento informado.
+- Listas ordenadas pela data mais recente e pesquisa com pequena pausa para reduzir lentidão.
+- Atualização agrupada de eventos em tempo real para evitar redesenhos excessivos da tela.
+- Aba e atalhos de Agendamentos removidos da interface. Os registros antigos continuam preservados no banco e nos backups/relatórios históricos.
+- Cache do aplicativo atualizado para forçar a leitura dos arquivos novos.
 
-COMO PUBLICAR
-1. Extraia o ZIP.
-2. No repositório auto-brilho-web, substitua app.js, index.html, style.css, sw.js, manifest.json e os ícones pelos arquivos deste pacote.
-3. Não apague nem substitua config.js.
-4. Aguarde a publicação do GitHub Pages.
-5. Feche completamente o aplicativo e abra novamente. Se necessário, atualize a página no navegador.
+COMO ATUALIZAR PELO CELULAR
+1. Baixe e extraia este ZIP no celular.
+2. Abra o repositório auto-brilho-web no GitHub.
+3. Substitua os arquivos app.js, index.html e sw.js pelos arquivos deste pacote. Os arquivos style.css, manifest.json e ícones também estão incluídos para manter o conjunto da versão.
+4. NÃO apague, não substitua e não crie outro config.js. Mantenha o arquivo que já contém as credenciais do seu projeto Supabase.
+5. Aguarde o GitHub Pages publicar a atualização.
+6. Feche completamente o aplicativo instalado e abra novamente. Se necessário, abra o endereço publicado no navegador e atualize a página.
+7. Entre no aplicativo e gere um backup JSON antes de fazer qualquer nova importação.
 
-VALIDAÇÃO
-- A sintaxe JavaScript deve ser verificada antes da publicação.
-- A atualização não foi testada contra a sessão real do Supabase nem em todos os navegadores/dispositivos. Faça backup e confira a prévia antes de importar.
+RECONCILIAÇÃO DA PLANILHA
+- A versão v14 exigia o campo Cliente preenchido em cada linha de serviço. Na planilha analisada, essa coluna está vazia, por isso os serviços poderiam não entrar na importação.
+- Depois de atualizar, selecione novamente a mesma planilha original na aba Relatórios e confira a prévia. A nova leitura deverá apresentar todos os serviços datados, inclusive os 128 sem vínculo automático.
+- A importação gera backup antes de gravar e compara os registros existentes para evitar duplicidades. Ainda assim, confira o resumo e mantenha o backup baixado.
+- Os serviços sem cliente identificável serão exibidos como “Não identificado”; não serão descartados.
+- Não faça uma segunda importação se a prévia não corresponder ao arquivo esperado. Cancele e peça conferência antes de confirmar.
+
+VALIDAÇÃO TÉCNICA
+- Arquivo JavaScript verificado com checagem de sintaxe.
+- Arquivo ZIP verificado sem erros de integridade.
+- Não foi possível testar a atualização contra a sessão real do Supabase nem no navegador do celular. Por isso, faça primeiro backup e confira a prévia antes de confirmar a importação.
