@@ -44,7 +44,12 @@ function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('sho
 function setLoginMessage(msg){$('loginMessage').textContent=msg}
 function showApp(show){$('loginScreen').classList.toggle('hidden',show);$('appShell').classList.toggle('hidden',!show);$('logoutBtn').classList.toggle('hidden',!show)}
 
-async function all(store){
+// Cache em memória: evita baixar a mesma tabela inteira a cada tela, busca ou atualização.
+const DATA_CACHE_TTL=120000; // 2 min de segurança; gravações e tempo real invalidam antes disso
+const dataCache=new Map(), dataInflight=new Map();
+function invalidateCache(store){if(store){dataCache.delete(store);dataInflight.delete(store);}else{dataCache.clear();dataInflight.clear();}}
+function mapRows(rows){return rows.map(r=>({...r.data,id:r.id,createdAt:r.created_at,updatedAt:r.updated_at}));}
+async function fetchAllRows(store){
  // Supabase limita cada resposta; buscar em páginas evita perder registros acima de 1.000.
  const pageSize=1000;let offset=0,rows=[];
  while(true){
@@ -54,7 +59,17 @@ async function all(store){
   if(page.length<pageSize)break;
   offset+=pageSize;
  }
- return rows.map(r=>({...r.data,id:r.id,createdAt:r.created_at,updatedAt:r.updated_at}));
+ return rows;
+}
+async function all(store){
+ const hit=dataCache.get(store);
+ if(hit&&Date.now()-hit.at<DATA_CACHE_TTL)return mapRows(hit.rows);
+ let p=dataInflight.get(store);
+ if(!p){
+  p=fetchAllRows(store).then(rows=>{if(dataInflight.get(store)===p)dataCache.set(store,{rows,at:Date.now()});return rows;}).finally(()=>{if(dataInflight.get(store)===p)dataInflight.delete(store);});
+  dataInflight.set(store,p);
+ }
+ return mapRows(await p);
 }
 
 async function save(store,item){
@@ -65,12 +80,14 @@ async function save(store,item){
  if(item.id)payload.id=item.id;
  const {data,error}=await sbClient.from(store).upsert(payload).select('id,data,created_at,updated_at').single();
  if(error)throw error;
+ invalidateCache(store);
  return {...data.data,id:data.id,createdAt:data.created_at,updatedAt:data.updated_at};
 }
 
 async function remove(store,id){
  const {error}=await sbClient.from(store).delete().eq('id',id);
  if(error)throw error;
+ invalidateCache(store);
 }
 
 function renderTabs(){
@@ -1540,7 +1557,7 @@ function subscribeRealtime(){
  realtimeChannel=sbClient.channel('auto-brilho-sync').on('postgres_changes',{event:'*',schema:'public'},()=>{
   if(realtimeRefreshTimer)clearTimeout(realtimeRefreshTimer);
   realtimeRefreshTimer=setTimeout(async()=>{
-   if(realtimeRefreshBusy)return;realtimeRefreshBusy=true;
+   if(realtimeRefreshBusy)return;realtimeRefreshBusy=true;invalidateCache();
    try{if(active==='home')await renderHomePanel();else if(active==='dashboard')await renderDashboards();else if(active==='reports')await renderFinancialMovement();else if(active==='pending')await renderPendingPaymentsTable();else await renderTable();await renderStats();}
    finally{realtimeRefreshBusy=false;}
   },450);
@@ -1655,6 +1672,7 @@ async function init(){
     await sbClient.removeChannel(realtimeChannel);
     realtimeChannel=null;
    }
+   invalidateCache();
    $('loginPassword').value='';
    showApp(false);
    setLoginMessage('Sessão encerrada. Informe seu e-mail e senha para entrar novamente.');
@@ -2097,6 +2115,7 @@ async function exportExcel(){
 $('addBtn').onclick=()=>{if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
 
 $('refreshBtn').onclick=()=>{
+ invalidateCache();
  if(active==='home')renderHomePanel();else if(active==='dashboard')renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else if(active==='reports')renderFinancialMovement();else renderTable();
  renderStats();
  showToast('Dados atualizados da nuvem.');
