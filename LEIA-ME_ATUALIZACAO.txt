@@ -1,3 +1,13 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v17 (sobre a v16)
+
+AJUSTE DA ABA DE CADASTRO (v17)
+- Ao abrir Cadastro, aparece somente o ranking "Clientes mais frequentes" e a busca.
+- Os cadastros (com veículos e botões) só aparecem ao pesquisar por NOME e/ou PLACA
+  (a placa funciona com ou sem hífen/espaço; a partir de 3 caracteres). Máximo de 30 resultados por busca.
+- Antes, todos os clientes eram desenhados de uma vez, o que causava a trava.
+- Arquivos alterados: app.js, sw.js e index.html (versão do cache v17).
+
+--- v16 (já instalada) ---
 AUTO BRILHO WEB — ATUALIZAÇÃO DE DESEMPENHO v16 (sobre a v14.1)
 
 O QUE MUDOU

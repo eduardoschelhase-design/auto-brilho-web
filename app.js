@@ -1823,7 +1823,7 @@ renderSection=function(){
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
@@ -1861,15 +1861,27 @@ renderClientVehicleForm=function(v={}){
 renderClientVehicleTable=async function(){
  try{
   const [clients,vehicles,services]=await Promise.all([all('clients'),all('vehicles'),all('services')]);
-  const q=normalizeText($('searchInput').value);
-  const cards=clients.map(c=>{
-   const vs=vehicles.filter(v=>v.clientId===c.id||sameClient(v.client,c.name));
-   const ss=services.filter(s=>sameClient(s.client,c.name));
-   return {c,vs,ss};
-  }).filter(x=>!q||[x.c.name,x.c.phone,x.c.document,...x.vs.flatMap(v=>[v.plate,v.model,v.brand,v.type])].some(v=>normalizeText(v).includes(q)));
-  if(!cards.length){$('tableWrap').innerHTML='<div class="empty">Nenhum cliente encontrado. Toque em “Novo cliente” para cadastrar.</div>';return;}
-  const ranking=cards.slice().sort((a,b)=>b.ss.length-a.ss.length).slice(0,5);
-  $('tableWrap').innerHTML=`<div class="client-ranking"><strong>Clientes mais frequentes</strong>${ranking.map((x,i)=>`<span>${i+1}. ${esc(x.c.name)} — ${x.ss.length} serviço(s)</span>`).join('')}</div>`+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
+  const rawQ=$('searchInput').value, q=normalizeText(rawQ), plateQ=normalizePlate(rawQ);
+  // Índices montados uma única vez (antes: cada cliente filtrava todos os veículos e serviços).
+  const vehiclesById=new Map(), vehiclesByName=new Map(), servicesByName=new Map();
+  const push=(map,key,item)=>{if(!key)return;const list=map.get(key);if(list)list.push(item);else map.set(key,[item]);};
+  vehicles.forEach(v=>{push(vehiclesById,v.clientId,v);push(vehiclesByName,normalizeText(v.client),v);});
+  services.forEach(s=>push(servicesByName,normalizeText(s.client),s));
+  const vehiclesOf=c=>{const seen=new Set();return [...(vehiclesById.get(c.id)||[]),...(vehiclesByName.get(normalizeText(c.name))||[])].filter(v=>!seen.has(v.id)&&seen.add(v.id));};
+  const build=c=>({c,vs:vehiclesOf(c),ss:servicesByName.get(normalizeText(c.name))||[]});
+  const ranking=clients.map(c=>({c,n:(servicesByName.get(normalizeText(c.name))||[]).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n).slice(0,5);
+  const rankingHtml=`<div class="client-ranking"><strong>Clientes mais frequentes</strong>${ranking.length?ranking.map((x,i)=>`<span>${i+1}. ${esc(x.c.name)} — ${x.n} serviço(s)</span>`).join(''):'<span>Ainda sem serviços registrados.</span>'}</div>`;
+  // Sem busca: só o ranking. Com busca (nome e/ou placa): só os cadastros encontrados.
+  let found=[],extra='';
+  if(q){
+   found=clients.filter(c=>normalizeText(c.name).includes(q)||(plateQ.length>=3&&vehiclesOf(c).some(v=>normalizePlate(v.plate).includes(plateQ)))).map(build);
+   if(!found.length){$('tableWrap').innerHTML='<div class="empty">Nenhum cliente ou placa encontrado para esta busca.</div>';return;}
+   if(found.length>30)extra=`<p class="muted small">Mostrando 30 de ${found.length} resultados. Digite mais letras para refinar.</p>`;
+  }else{
+   extra='<p class="muted">Digite o nome do cliente ou a placa do veículo para localizar um cadastro.</p>';
+  }
+  const cards=found.slice(0,30);
+  $('tableWrap').innerHTML=(found.length?'':rankingHtml)+extra+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
    <div class="client-vehicles">${vs.length?vs.map(v=>`<div class="client-vehicle-row"><span><b>${esc(normalizePlate(v.plate))}</b> · ${esc([v.brand,v.model,v.type].filter(Boolean).join(' ')||'Veículo')}</span><button class="action" data-editvehicle="${esc(v.id)}">Editar</button></div>`).join(''):'<p class="muted">Nenhum veículo cadastrado.</p>'}</div>
    <div class="client-actions"><button class="action" data-addvehicle="${esc(c.id)}">+ Veículo</button><button class="action" data-newservice="${esc(c.id)}">Novo serviço</button><button class="action" data-history="${esc(c.id)}">Histórico</button><button class="action danger-action" data-deleteclient="${esc(c.id)}">Excluir cliente</button></div></article>`).join('');
   $('tableWrap').querySelectorAll('[data-addvehicle]').forEach(b=>{const c=cards.find(x=>x.c.id===b.dataset.addvehicle).c;b.onclick=()=>renderClientVehicleForm({addAnother:true,clientId:c.id,clientRecord:c});});
