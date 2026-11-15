@@ -1,3 +1,16 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v18 (sobre a v17)
+
+CONTAS A PAGAR (v18)
+- A lista "Contas próximas do vencimento ou vencidas" saiu da aba Início (o indicador numérico continua).
+- A aba Contas a pagar agora mostra só pendências do mês, com filtros:
+  * Todas = atrasadas + pendentes do mês (padrão)
+  * Pendentes do mês = ainda não venceram e vencem neste mês (inclui contas sem data de vencimento)
+  * Atrasadas = vencimento anterior a hoje, de QUALQUER mês (para nenhuma conta antiga ficar escondida)
+- Contas com vencimento em meses futuros não aparecem; um aviso informa quantas são.
+- Lista ordenada por vencimento (mais antigas primeiro) e a busca continua funcionando junto com o filtro.
+- Arquivos alterados: app.js, style.css, sw.js e index.html (cache v18).
+
+--- v17 (já instalada) ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v17 (sobre a v16)
 
 AJUSTE DA ABA DE CADASTRO (v17)

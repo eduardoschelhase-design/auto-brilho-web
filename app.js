@@ -268,15 +268,33 @@ function renderExpenseForm(item={},isPayable=false){
  };
 }
 
+let payablesFilter='all';
 async function renderPayablesTable(){
  try{
   const rows=await all('expenses');
   const q=$('searchInput').value.trim().toLocaleLowerCase('pt-BR');
-  const open=rows.filter(r=>r.paymentStatus==='Em aberto'||r.paymentStatus==='Pendente')
-   .filter(r=>!q||Object.values(r).some(v=>String(v??'').toLocaleLowerCase('pt-BR').includes(q)));
-  const total=open.reduce((n,r)=>n+Number(r.value||0),0);
-  $('tableWrap').innerHTML=`<div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Contas em aberto</span><strong>${open.length}</strong></div><div class="dashboard-metric"><span>Total a pagar</span><strong>${money(total)}</strong></div></div>
-   ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dateBR(r.dueDate||r.date)}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nenhuma conta em aberto.</div>'}`;
+  const today=localISODate(), monthKey=today.slice(0,7);
+  const isOpen=r=>r.paymentStatus==='Em aberto'||r.paymentStatus==='Pendente';
+  const dueOf=r=>/^\d{4}-\d{2}-\d{2}$/.test(String(r.dueDate||''))?r.dueDate:'';
+  // Atrasada: vencimento anterior a hoje (qualquer mês, para nada ficar esquecido).
+  const isLate=r=>!!dueOf(r)&&dueOf(r)<today;
+  // Pendente: ainda não venceu e vence neste mês (ou está sem data de vencimento).
+  const isMonthPending=r=>!isLate(r)&&(!dueOf(r)||dueOf(r).slice(0,7)===monthKey);
+  const matches=r=>!q||Object.values(r).some(v=>String(v??'').toLocaleLowerCase('pt-BR').includes(q));
+  const openRows=rows.filter(isOpen);
+  const late=openRows.filter(isLate), pend=openRows.filter(isMonthPending);
+  const futureCount=openRows.length-late.length-pend.length;
+  const sum=a=>a.reduce((n,r)=>n+Number(r.value||0),0);
+  const base=payablesFilter==='late'?late:payablesFilter==='pending'?pend:[...late,...pend];
+  const open=base.filter(matches).sort((a,b)=>(dueOf(a)||'9999').localeCompare(dueOf(b)||'9999'));
+  const total=sum(open);
+  const chip=(key,label,n)=>`<button type="button" class="filter-chip ${payablesFilter===key?'active':''}" data-pfilter="${key}">${label} (${n})</button>`;
+  const emptyMsg=payablesFilter==='late'?'Nenhuma conta atrasada.':payablesFilter==='pending'?'Nenhuma conta pendente neste mês.':'Nenhuma conta atrasada ou pendente neste mês.';
+  $('tableWrap').innerHTML=`<div class="filter-chips">${chip('all','Todas',late.length+pend.length)}${chip('pending','Pendentes do mês',pend.length)}${chip('late','Atrasadas',late.length)}</div>
+   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Atrasadas</span><strong>${money(sum(late))}</strong></div><div class="dashboard-metric"><span>Pendentes do mês</span><strong>${money(sum(pend))}</strong></div><div class="dashboard-metric"><span>Total da lista</span><strong>${money(total)}</strong></div></div>
+   ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dueOf(r)?dateBR(dueOf(r)):'Sem vencimento'}${isLate(r)?' <span class="late-badge">Atrasada</span>':''}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${emptyMsg}</div>`}
+   ${futureCount?`<p class="muted small">${futureCount} conta(s) com vencimento em meses futuros não aparecem nesta lista.</p>`:''}`;
+  $('tableWrap').querySelectorAll('[data-pfilter]').forEach(b=>b.onclick=()=>{payablesFilter=b.dataset.pfilter;renderPayablesTable();});
   $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>renderForm(open.find(r=>r.id===b.dataset.edit)));
   $('tableWrap').querySelectorAll('[data-pay]').forEach(b=>b.onclick=async()=>{
    const r=open.find(x=>x.id===b.dataset.pay);if(!r)return;
@@ -1829,7 +1847,7 @@ renderSection=function(){
 
 async function renderHomePanel(){
  try{const [services,payments,expenses]=await Promise.all([all('services'),all('payments'),all('expenses')]);const today=localISODate();const due=expenses.filter(isDueAlert);const todayServices=services.filter(s=>s.date===today&&s.status==='Concluído');const todayReceived=payments.filter(p=>p.date===today&&p.status==='Pago').reduce((n,p)=>n+Number(p.value||0),0);
- $('tableWrap').innerHTML=`<div class="home-quick-actions"><button class="primary" data-home-action="services">+ Novo serviço</button><button class="secondary" data-home-action="pending">Pagamentos pendentes</button><button class="secondary" data-home-action="payables">Contas a pagar</button><button class="secondary" data-home-action="reports">Relatórios</button></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Serviços concluídos hoje</span><strong>${todayServices.length}</strong></div><div class="dashboard-metric"><span>Recebido hoje</span><strong>${money(todayReceived)}</strong></div><div class="dashboard-metric"><span>Contas a vencer / atrasadas</span><strong>${due.length}</strong></div></div>${due.length?`<div class="alert-panel"><strong>Contas próximas do vencimento ou vencidas</strong>${due.map(e=>`<p>${dateBR(e.dueDate)} · ${esc(e.description)} · ${money(e.value)}</p>`).join('')}</div>`:''}<p class="dashboard-footnote">O painel inicial mostra apenas os principais indicadores e atalhos. Análises, metas e controles detalhados ficam na aba Dashboards.</p>`;
+ $('tableWrap').innerHTML=`<div class="home-quick-actions"><button class="primary" data-home-action="services">+ Novo serviço</button><button class="secondary" data-home-action="pending">Pagamentos pendentes</button><button class="secondary" data-home-action="payables">Contas a pagar</button><button class="secondary" data-home-action="reports">Relatórios</button></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Serviços concluídos hoje</span><strong>${todayServices.length}</strong></div><div class="dashboard-metric"><span>Recebido hoje</span><strong>${money(todayReceived)}</strong></div><div class="dashboard-metric"><span>Contas a vencer / atrasadas</span><strong>${due.length}</strong></div></div><p class="dashboard-footnote">O painel inicial mostra apenas os principais indicadores e atalhos. Análises, metas e controles detalhados ficam na aba Dashboards.</p>`;
  $('tableWrap').querySelectorAll('[data-home-action]').forEach(b=>b.onclick=()=>{active=b.dataset.homeAction;renderTabs();renderSection();if(active==='services')renderServiceForm();});
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar o resumo inicial.</div>';console.error(err);}
 }
