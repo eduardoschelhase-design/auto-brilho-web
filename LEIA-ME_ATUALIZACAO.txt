@@ -1,3 +1,29 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v19 (sobre a v18)
+
+ABA FINANCEIRO (antiga "Pagamentos")
+- Nome da aba: Financeiro. Mostra o resumo do mês escolhido: entradas recebidas (serviços + outras entradas),
+  saídas pagas, resultado, a receber e a pagar (vence no mês), com filtros Todas / Entradas / Saídas / Outras entradas.
+- Botão "+ Outra entrada": lança entradas que não vêm de serviços (venda de produto, aporte, reembolso...).
+  Só as outras entradas podem ser editadas/excluídas aqui; entradas de serviços ficam em Serviços e saídas em
+  Despesas / Contas a pagar (evita desligar um serviço recebido do financeiro).
+- Pagamentos pendentes continuam na aba Pendentes. A exportação para Excel mantém os mesmos nomes de abas.
+
+DATAS (corrigido)
+- Datas padrão dos formulários usavam o horário UTC: depois das 21h (Brasil) vinham com o dia seguinte.
+  Agora usam a data local.
+- Importação: as colunas de data agora são lidas pelo valor real da célula, e não pelo texto exibido
+  (que dependia do formato da célula e trocava dia e mês). Datas em texto seguem dd/mm/aaaa.
+- Linhas com data ausente/inválida (serviços, pagamentos, despesas pagas, agendamentos) não são importadas
+  e a prévia lista os números das linhas da planilha para você corrigir.
+
+LIMITE DA IMPORTAÇÃO
+- Até 10.000 linhas por aba e 25.000 no total (cabeçalho não conta). Aparece na aba Relatórios.
+- O Excel aceita 1.048.576 linhas (.xlsx) / 65.536 (.xls); o limite do app existe porque a gravação é linha a linha.
+- A importação agora mostra o progresso (ex.: "Importando serviços 120/800...").
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v19).
+
+--- v18 (já instalada) ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v18 (sobre a v17)
 
 CONTAS A PAGAR (v18)

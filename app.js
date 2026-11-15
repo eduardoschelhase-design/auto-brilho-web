@@ -179,7 +179,7 @@ function renderForm(item={}){
   if(type==='select')input=`<select name="${key}" ${required?'required':''}><option value="">Selecione...</option>${opts.map(o=>`<option ${item[key]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
   else if(type==='textarea')input=`<textarea name="${key}" rows="2">${esc(item[key]||'')}</textarea>`;
   else if(key==='value')input=`<input name="${key}" type="text" inputmode="decimal" ${required?'required':''} value="${esc(item[key]!==undefined?decimalText(item[key]):'')}" placeholder="0,00">`;
-  else input=`<input name="${key}" type="${type}" ${required?'required':''} ${type==='number'?'min="0" step="0.01"':''} value="${esc(item[key]??(type==='date'?new Date().toISOString().slice(0,10):''))}" placeholder="${type==='number'?'0,00':''}">`;
+  else input=`<input name="${key}" type="${type}" ${required?'required':''} ${type==='number'?'min="0" step="0.01"':''} value="${esc(item[key]??(type==='date'?localISODate():''))}" placeholder="${type==='number'?'0,00':''}">`;
   return `<div class="field"><label>${esc(label)}${required?' *':''}</label>${input}</div>`;
  }).join('')}</div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar cadastro'}</button></div></form>`;
 
@@ -326,7 +326,7 @@ function renderServiceForm(item={}){
  $('formWrap').classList.remove('hidden');
  editId=item.id??null;
  const initialPlate=normalizePlate(item.vehicle||'');
- const initialDate=item.date||new Date().toISOString().slice(0,10);
+ const initialDate=item.date||localISODate();
  const paymentMethods=['Dinheiro','Pix','Cartão','Brinde'];
  $('formWrap').innerHTML=`
   <form id="recordForm">
@@ -486,7 +486,7 @@ async function renderAppointmentForm(item={}){
  $('formWrap').innerHTML=`
   <form id="recordForm">
    <div class="form-grid">
-    <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(item.date||new Date().toISOString().slice(0,10))}"></div>
+    <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(item.date||localISODate())}"></div>
     <div class="field"><label>Horário *</label><input name="time" type="time" required value="${esc(item.time||'')}"></div>
     <div class="field"><label>Cliente *</label><input name="client" type="text" required value="${esc(item.client||'')}"></div>
     <div class="field"><label>Veículo / placa *</label><input name="vehicle" type="text" required value="${esc(item.vehicle||'')}" style="text-transform:uppercase" autocapitalize="characters"></div>
@@ -846,6 +846,7 @@ async function renderTable(){
   return;
  }
  if(active==='payables'){await renderPayablesTable();return;}
+ if(active==='payments'){await renderFinancePanel();return;}
 
  const m=modules[active];
 
@@ -1530,7 +1531,7 @@ async function exportExcel(){
    XLSX.utils.book_append_sheet(wb,ws,m.label.slice(0,31));
   }
 
-  const stamp=new Date().toISOString().slice(0,10);
+  const stamp=localISODate();
   XLSX.writeFile(wb,`Auto_Brilho_Relatorios_${stamp}.xlsx`);
   status.textContent='Arquivo Excel gerado com seis abas.';
   showToast('Relatórios Excel exportados.');
@@ -1559,7 +1560,7 @@ async function backupJSON(){
   const a=document.createElement('a');
 
   a.href=url;
-  a.download=`Auto_Brilho_Backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.download=`Auto_Brilho_Backup_${localISODate()}.json`;
   a.click();
 
   URL.revokeObjectURL(url);
@@ -1816,7 +1817,7 @@ function selectedVehicleForClient(client,vehicles){
 renderTabs=function(){
  const tabs=[
   ['home','⌂','Início'],['dashboard','▥','Dashboards'],['clients','♙','Cadastro'],['services','✦','Serviços'],
-  ['payments','R$','Pagamentos'],['pending','◷','Pendentes'],
+  ['payments','R$','Financeiro'],['pending','◷','Pendentes'],
   ['expenses','−','Despesas'],['payables','◷','Contas a pagar'],['reports','▤','Relatórios']
  ];
  $('tabs').innerHTML=tabs.map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
@@ -1837,11 +1838,11 @@ renderSection=function(){
  if(reports){$('sectionTitle').textContent='Relatórios e importação';$('exportStatus').textContent='';renderFinancialMovement();return;}
  const special=home||dashboard||active==='pending';
  $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
- $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':modules[active]?.label||'Gestão';
+ $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':modules[active]?.label||'Gestão';
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
- $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':'Buscar neste cadastro…';
+ $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':'+ Novo '+(modules[active]?.singular||'registro');
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
@@ -2027,20 +2028,40 @@ async function renderFinancialMovement(){
  }catch(err){$('financialMovement').textContent='Não foi possível carregar o movimento financeiro.';}
 }
 function excelDate(v){
- const iso=(y,m,d)=>{y=Number(y);m=Number(m);d=Number(d);if(!y||m<1||m>12||d<1||d>31)return '';const out=`${String(y).padStart(4,'0')}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const test=new Date(`${out}T12:00:00`);return test.getFullYear()===y&&test.getMonth()+1===m&&test.getDate()===d?out:'';};
+ const iso=(y,m,d)=>{y=Number(y);m=Number(m);d=Number(d);if(!y||y<1990||y>2100||m<1||m>12||d<1||d>31)return '';const out=`${String(y).padStart(4,'0')}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const test=new Date(`${out}T12:00:00`);return test.getFullYear()===y&&test.getMonth()+1===m&&test.getDate()===d?out:'';};
  if(v instanceof Date&&!Number.isNaN(v.getTime()))return iso(v.getFullYear(),v.getMonth()+1,v.getDate());
- if(typeof v==='number'&&Number.isFinite(v)&&v>0){const d=XLSX.SSF.parse_date_code(v);return d?iso(d.y,d.m,d.d):'';}
+ if(typeof v==='number'&&Number.isFinite(v)&&v>=20000&&v<80000){const d=XLSX.SSF.parse_date_code(v);return d?iso(d.y,d.m,d.d):'';}
  let s=String(v??'').trim();if(!s)return '';s=s.split(/[ T]/)[0];
  let m=s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);if(m)return iso(m[1],m[2],m[3]);
- m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m){let y=Number(m[3]);if(y<100)y+=y<50?2000:1900;return iso(y,m[2],m[1]);}
+ m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/);if(m){let y=Number(m[3]);if(y<100)y+=y<50?2000:1900;let dd=Number(m[1]),mm=Number(m[2]);if(mm>12&&dd<=12){const t=dd;dd=mm;mm=t;}return iso(y,mm,dd);}
  if(/^\d+(?:\.\d+)?$/.test(s)){const n=Number(s);if(n>20000){const d=XLSX.SSF.parse_date_code(n);return d?iso(d.y,d.m,d.d):'';}}
  return '';
 }
-function rowObjects(ws){const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});return rows;}
+const IMPORT_MAX_ROWS_PER_SHEET=10000, IMPORT_MAX_ROWS_TOTAL=25000;
+const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data de vencimento'];
+function rowObjects(ws){
+ const shown=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+ let raw=[];try{raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});}catch(e){}
+ // Colunas de data são lidas pelo valor real da célula (número de série do Excel) e não pelo texto exibido,
+ // que depende do formato da célula (mm/dd/aa x dd/mm/aaaa) e trocava o dia com o mês.
+ const byRow=new Map();raw.forEach(r=>{if(r&&r.__rowNum__!=null)byRow.set(r.__rowNum__,r);});
+ shown.forEach((row,i)=>{const r=(row.__rowNum__!=null&&byRow.get(row.__rowNum__))||raw[i];if(!r)return;IMPORT_DATE_COLUMNS.forEach(c=>{if(c in row&&typeof r[c]==='number')row[c]=r[c];});});
+ return shown;
+}
+const importRowNumber=r=>r&&r.__rowNum__!=null?r.__rowNum__+1:'?';
 async function stageExcelFile(file){
  if(!window.XLSX)throw new Error('Leitor Excel indisponível.');
- const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});
- const get=n=>wb.Sheets[n]?rowObjects(wb.Sheets[n]):[];
+ const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:false});
+ let totalRows=0;const warnings=[];
+ const get=n=>{
+  if(!wb.Sheets[n])return [];
+  const rows=rowObjects(wb.Sheets[n]);
+  if(rows.length>IMPORT_MAX_ROWS_PER_SHEET)throw new Error(`A aba “${n}” tem ${rows.length.toLocaleString('pt-BR')} linhas e o limite é ${IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('pt-BR')} por aba. Divida a planilha em partes menores.`);
+  totalRows+=rows.length;
+  if(totalRows>IMPORT_MAX_ROWS_TOTAL)throw new Error(`A planilha passa do limite de ${IMPORT_MAX_ROWS_TOTAL.toLocaleString('pt-BR')} linhas no total. Divida a planilha em partes menores.`);
+  return rows;
+ };
+ const warnDates=(label,rows)=>{if(rows.length)warnings.push(`${rows.length} linha(s) de “${label}” com data ausente ou inválida não serão importadas (linhas da planilha: ${rows.slice(0,12).join(', ')}${rows.length>12?'…':''}).`);};
  const clients=get('Clientes').map((r,i)=>({r,i})).filter(x=>String(x.r['Nome completo']||'').trim()).map(({r,i})=>({name:String(r['Nome completo']).trim(),phone:String(r['Telefone / WhatsApp']||'').trim(),email:r['E-mail']||'',document:String(r['CPF / CNPJ']||'').trim(),address:r['Endereço']||'',notes:r['Observações']||'',registrationDate:excelDate(r['Data de cadastro']),importKey:'excel-client-'+i+'-'+normalizeText(r['Nome completo'])}));
  const vehicles=get('Veículos').filter(r=>String(r['Placa']||'').trim()).map(r=>({client:String(r['Cliente']||'').trim(),plate:normalizePlate(r['Placa']),type:String(r['Tipo de veículo']||'Outro').trim(),brand:String(r['Marca']||'').trim(),model:String(r['Modelo']||'').trim(),color:String(r['Cor']||'').trim(),notes:r['Observações']||''}));
  const vehicleOwner=new Map();vehicles.forEach(v=>{if(v.plate&&v.client)vehicleOwner.set(v.plate,v.client);});
@@ -2052,20 +2073,30 @@ async function stageExcelFile(file){
   const financial=normalizeText(r['Situação financeira']);
   const rawStatus=normalizeText(r['Situação']||'concluido');
   const serviceStatus=['concluido','concluida','finalizado','finalizada'].includes(rawStatus)?'Concluído':['em andamento','andamento'].includes(rawStatus)?'Em andamento':'Cancelado';
-  return {importKey:'excel-service-'+i,date:excelDate(r['Data']),client,vehicle:plate||'SEM PLACA',service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),_valueProvided:String(r['Valor (R$)']??'').trim()!=='',status:serviceStatus,paymentStatus:['recebido','pago','quitado','quitada'].includes(financial)?'Recebido':'Pendente',paymentMethod:method==='Brinde'?'Brinde':method,receivedDate:excelDate(r['Data']),notes:String(r['Observações']||'').trim()};
+  return {_row:importRowNumber(r),importKey:'excel-service-'+i,date:excelDate(r['Data']),client,vehicle:plate||'SEM PLACA',service:String(r['Serviço executado']||'Serviço').trim(),value:decimalValue(r['Valor (R$)']),_valueProvided:String(r['Valor (R$)']??'').trim()!=='',status:serviceStatus,paymentStatus:['recebido','pago','quitado','quitada'].includes(financial)?'Recebido':'Pendente',paymentMethod:method==='Brinde'?'Brinde':method,receivedDate:excelDate(r['Data']),notes:String(r['Observações']||'').trim()};
  });
- const payments=get('Receitas e pagamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Descrição']||'').trim()).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim()||'Não identificado',description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
+warnDates('Serviços realizados',services.filter(s=>!s.date).map(s=>s._row));
+ const paymentRows=get('Receitas e pagamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Descrição']||'').trim());
+ warnDates('Receitas e pagamentos',paymentRows.filter(r=>!excelDate(r['Data'])).map(importRowNumber));
+ const payments=paymentRows.filter(r=>excelDate(r['Data'])).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim()||'Não identificado',description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
  const expenseRows=get('Despesas');
  const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&Math.abs(decimalValue(d['Valor (R$)'])-decimalValue(p['Valor (R$)']))<0.01&&String(d['Data de vencimento']||d['Data do pagamento']||'')===String(p['Data de vencimento']||p['Data do pagamento']||'')));
+ const badExpenseDates=[];
  const expenses=[...expenseRows,...payableRows].map((r,i)=>({r,i})).filter(x=>String(x.r['Descrição']||'').trim()).map(({r,i})=>{
   const rawCat=String(r['Categoria']||'Diversos').trim();
   const category=canonicalExpenseCategory(rawCat);
   const status=normalizeText(r['Situação']);
   const due=excelDate(r['Data de vencimento']);
-  return {importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:due==='3000-01-01'?'':due,category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
- });
- const appointments=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
- return {clients,vehicles,services,payments,expenses,appointments};
+  const rowNo=importRowNumber(r);
+  const expenseObj={importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:due==='3000-01-01'?'':due,category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
+  if(expenseObj.paymentStatus==='Pago'&&!expenseObj.date){badExpenseDates.push(rowNo);return null;}
+  return expenseObj;
+ }).filter(Boolean);
+ warnDates('Despesas / Contas a pagar (pagas)',badExpenseDates);
+ const appointmentRows=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim());
+ warnDates('Agendamentos',appointmentRows.filter(r=>!excelDate(r['Data'])).map(importRowNumber));
+ const appointments=appointmentRows.filter(r=>excelDate(r['Data'])).filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
+ return {clients,vehicles,services,payments,expenses,appointments,warnings,totalRows};
 }
 function serviceKey(s){return [s.date,normalizeText(s.client),normalizePlate(s.vehicle),normalizeText(s.service),Number(s.value||0).toFixed(2)].join('|');}
 function sameImportedService(a,b){return a.date===b.date&&normalizePlate(a.vehicle)===normalizePlate(b.vehicle)&&normalizeText(a.service)===normalizeText(b.service)&&Math.abs(Number(a.value||0)-Number(b.value||0))<0.01&&(!a.client||!b.client||normalizeText(a.client)==='nao identificado'||normalizeText(b.client)==='nao identificado'||sameClient(a.client,b.client));}
@@ -2079,11 +2110,12 @@ async function importStagedExcel(){
   const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,appointments:0,duplicates:0,invalidServices:0};
   let currentClients=await all('clients'),currentVehicles=await all('vehicles'),currentServices=await all('services'),currentPayments=await all('payments'),currentExpenses=await all('expenses'),currentAppointments=await all('appointments');
   const clientMap=new Map();
-  for(const c of data.clients){let found=currentClients.find(x=>x.importKey===c.importKey)||(c.document&&currentClients.find(x=>String(x.document||'').replace(/\D/g,'')===c.document.replace(/\D/g,'')))||(c.phone&&currentClients.find(x=>String(x.phone||'').replace(/\D/g,'')===c.phone.replace(/\D/g,'')))||(!c.phone&&!c.document&&currentClients.find(x=>sameClient(x.name,c.name)&&!x.importKey));if(found){if(!found.registrationDate&&c.registrationDate){found=await save('clients',{...found,registrationDate:c.registrationDate});currentClients=currentClients.map(x=>x.id===found.id?found:x);}clientMap.set(normalizeText(c.name),found);counts.duplicates++;}else{const saved=await save('clients',c);currentClients.push(saved);clientMap.set(normalizeText(c.name),saved);counts.clients++;}}
-  for(const v of data.vehicles){const cl=clientMap.get(normalizeText(v.client))||currentClients.find(c=>sameClient(c.name,v.client));const existing=currentVehicles.find(x=>normalizePlate(x.plate)===v.plate);if(existing){if(cl&&!existing.clientId){const updated=await save('vehicles',{...existing,clientId:cl.id,client:existing.client||cl.name});currentVehicles=currentVehicles.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}if(!cl){counts.duplicates++;continue;}const saved=await save('vehicles',{...v,clientId:cl.id,client:cl.name});currentVehicles.push(saved);counts.vehicles++;}
+  let prog=0;const progress=(label,done,total)=>{if(done%20===0||done===total){btn.textContent=`Importando ${label} ${done}/${total}...`;}};
+  for(const c of data.clients){progress('clientes',++prog,data.clients.length);let found=currentClients.find(x=>x.importKey===c.importKey)||(c.document&&currentClients.find(x=>String(x.document||'').replace(/\D/g,'')===c.document.replace(/\D/g,'')))||(c.phone&&currentClients.find(x=>String(x.phone||'').replace(/\D/g,'')===c.phone.replace(/\D/g,'')))||(!c.phone&&!c.document&&currentClients.find(x=>sameClient(x.name,c.name)&&!x.importKey));if(found){if(!found.registrationDate&&c.registrationDate){found=await save('clients',{...found,registrationDate:c.registrationDate});currentClients=currentClients.map(x=>x.id===found.id?found:x);}clientMap.set(normalizeText(c.name),found);counts.duplicates++;}else{const saved=await save('clients',c);currentClients.push(saved);clientMap.set(normalizeText(c.name),saved);counts.clients++;}}
+  prog=0;for(const v of data.vehicles){progress('veículos',++prog,data.vehicles.length);const cl=clientMap.get(normalizeText(v.client))||currentClients.find(c=>sameClient(c.name,v.client));const existing=currentVehicles.find(x=>normalizePlate(x.plate)===v.plate);if(existing){if(cl&&!existing.clientId){const updated=await save('vehicles',{...existing,clientId:cl.id,client:existing.client||cl.name});currentVehicles=currentVehicles.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}if(!cl){counts.duplicates++;continue;}const saved=await save('vehicles',{...v,clientId:cl.id,client:cl.name});currentVehicles.push(saved);counts.vehicles++;}
   const serviceMap=new Map();
-  for(const s of data.services){if(!s.date||!s._valueProvided||!Number.isFinite(s.value)||s.value<0){counts.invalidServices++;continue;}const key=s.importKey||serviceKey(s);let found=currentServices.find(x=>x.importKey===key)||currentServices.find(x=>sameImportedService(x,s));if(found){const servicePatch={...found};let needsServiceUpdate=false;if((!found.client||normalizeText(found.client)==='nao identificado')&&s.client&&normalizeText(s.client)!=='nao identificado'){servicePatch.client=s.client;needsServiceUpdate=true;}if(normalizeText(found.status)==='concluido'&&found.status!=='Concluído'){servicePatch.status='Concluído';needsServiceUpdate=true;}if(normalizeText(found.paymentStatus)==='recebido'&&found.paymentStatus!=='Recebido'){servicePatch.paymentStatus='Recebido';needsServiceUpdate=true;}if(needsServiceUpdate){servicePatch.importKey=key;found=await save('services',servicePatch);currentServices=currentServices.map(x=>x.id===found.id?found:x);}counts.duplicates++;serviceMap.set(key,found);continue;}const {_valueProvided,...serviceData}=s;const saved=await save('services',{...serviceData,importKey:key,vehicle:s.vehicle||'SEM PLACA'});currentServices.push(saved);serviceMap.set(key,saved);counts.services++;}
-  for(const p of data.payments){let matched=null;const plate=(p.description.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2,3}/i)||[])[0]||'';matched=currentServices.find(s=>s.date===p.date&&sameClient(s.client,p.client)&&Math.abs(Number(s.value||0)-p.value)<0.01&&(!plate||normalizePlate(s.vehicle)===normalizePlate(plate)));if(matched){const old=currentPayments.find(x=>x.serviceId===matched.id);if(old){counts.duplicates++;continue;}const status=normalizeText(p.status)==='pago'?'Pago':normalizeText(p.status)==='brinde'?'Brinde':'Pendente';const saved=await save('payments',{...p,status,serviceId:matched.id});currentPayments.push(saved);counts.payments++;}else{const exists=currentPayments.some(x=>x.date===p.date&&sameClient(x.client,p.client)&&normalizeText(x.description)===normalizeText(p.description)&&Math.abs(Number(x.value||0)-p.value)<0.01);if(exists){counts.duplicates++;continue;}const saved=await save('payments',{...p,status:normalizeText(p.status)==='pago'?'Pago':p.status});currentPayments.push(saved);counts.payments++;}}
+  prog=0;for(const s of data.services){progress('serviços',++prog,data.services.length);if(!s.date||!s._valueProvided||!Number.isFinite(s.value)||s.value<0){counts.invalidServices++;continue;}const key=s.importKey||serviceKey(s);let found=currentServices.find(x=>x.importKey===key)||currentServices.find(x=>sameImportedService(x,s));if(found){const servicePatch={...found};let needsServiceUpdate=false;if((!found.client||normalizeText(found.client)==='nao identificado')&&s.client&&normalizeText(s.client)!=='nao identificado'){servicePatch.client=s.client;needsServiceUpdate=true;}if(normalizeText(found.status)==='concluido'&&found.status!=='Concluído'){servicePatch.status='Concluído';needsServiceUpdate=true;}if(normalizeText(found.paymentStatus)==='recebido'&&found.paymentStatus!=='Recebido'){servicePatch.paymentStatus='Recebido';needsServiceUpdate=true;}if(needsServiceUpdate){servicePatch.importKey=key;found=await save('services',servicePatch);currentServices=currentServices.map(x=>x.id===found.id?found:x);}counts.duplicates++;serviceMap.set(key,found);continue;}const {_valueProvided,_row,...serviceData}=s;const saved=await save('services',{...serviceData,importKey:key,vehicle:s.vehicle||'SEM PLACA'});currentServices.push(saved);serviceMap.set(key,saved);counts.services++;}
+  prog=0;for(const p of data.payments){progress('pagamentos',++prog,data.payments.length);let matched=null;const plate=(p.description.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2,3}/i)||[])[0]||'';matched=currentServices.find(s=>s.date===p.date&&sameClient(s.client,p.client)&&Math.abs(Number(s.value||0)-p.value)<0.01&&(!plate||normalizePlate(s.vehicle)===normalizePlate(plate)));if(matched){const old=currentPayments.find(x=>x.serviceId===matched.id);if(old){counts.duplicates++;continue;}const status=normalizeText(p.status)==='pago'?'Pago':normalizeText(p.status)==='brinde'?'Brinde':'Pendente';const saved=await save('payments',{...p,status,serviceId:matched.id});currentPayments.push(saved);counts.payments++;}else{const exists=currentPayments.some(x=>x.date===p.date&&sameClient(x.client,p.client)&&normalizeText(x.description)===normalizeText(p.description)&&Math.abs(Number(x.value||0)-p.value)<0.01);if(exists){counts.duplicates++;continue;}const saved=await save('payments',{...p,status:normalizeText(p.status)==='pago'?'Pago':p.status});currentPayments.push(saved);counts.payments++;}}
   // Concilia automaticamente os serviços históricos recebidos, sem duplicar pagamentos já vinculados.
   for(const s of data.services){
    if(!s.date||!Number.isFinite(s.value)||s.value<0)continue;
@@ -2099,7 +2131,7 @@ async function importStagedExcel(){
    const payment={serviceId:service.id,date:service.date,client:service.client||'Não identificado',description:`Serviço ${service.service||''} - ${service.vehicle||''}`,method:method||'Outro',value:Number(service.value||0),status:method==='Brinde'?'Brinde':'Pago',notes:service.notes||''};
    const saved=await save('payments',payment);currentPayments.push(saved);counts.payments++;
   }
-  for(const e of data.expenses){if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.find(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&(canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category))));if(exists){const normalizedCategory=canonicalExpenseCategory(exists.category);const cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate; if(normalizedCategory!==exists.category||cleanDue!==exists.dueDate){const updated=await save('expenses',{...exists,category:normalizedCategory,dueDate:cleanDue});currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}const saved=await save('expenses',{...e,category:canonicalExpenseCategory(e.category)});currentExpenses.push(saved);counts.expenses++;}
+  prog=0;for(const e of data.expenses){progress('despesas',++prog,data.expenses.length);if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.find(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&(canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category))));if(exists){const normalizedCategory=canonicalExpenseCategory(exists.category);const cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate; if(normalizedCategory!==exists.category||cleanDue!==exists.dueDate){const updated=await save('expenses',{...exists,category:normalizedCategory,dueDate:cleanDue});currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}const saved=await save('expenses',{...e,category:canonicalExpenseCategory(e.category)});currentExpenses.push(saved);counts.expenses++;}
   for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
   stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
@@ -2127,7 +2159,7 @@ function downloadImportTemplate(){
  showToast('Planilha-modelo de importação baixada.');
 }
 
-async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços (incluindo ${d.services.filter(s=>normalizeText(s.client)==='nao identificado').length} sem vínculo automático, que serão preservados como “Não identificado”)</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li><li>${d.appointments.length} agendamentos</li></ul><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
+async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;const limitNote=$('importLimitNote');if(limitNote)limitNote.textContent=`Limite de importação: até ${IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('pt-BR')} linhas por aba e ${IMPORT_MAX_ROWS_TOTAL.toLocaleString('pt-BR')} no total (a linha do cabeçalho não conta). O Excel em si aceita até 1.048.576 linhas (.xlsx) ou 65.536 (.xls), mas o aplicativo grava linha a linha na nuvem; acima de 2.000 linhas a importação pode levar vários minutos, então mantenha a tela aberta. Use datas em dd/mm/aaaa ou células de data do Excel.`;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços (incluindo ${d.services.filter(s=>normalizeText(s.client)==='nao identificado').length} sem vínculo automático, que serão preservados como “Não identificado”)</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li><li>${d.appointments.length} agendamentos</li></ul>${(d.warnings&&d.warnings.length)?`<div class="alert-panel"><strong>Atenção: confira antes de confirmar</strong>${d.warnings.map(w=>`<p>${esc(w)}</p>`).join('')}</div>`:''}<p class="muted small">Linhas lidas na planilha: ${Number(d.totalRows||0).toLocaleString('pt-BR')}.</p><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
 
 async function exportExcel(){
  const status=$('exportStatus');status.textContent='Preparando relatórios...';
@@ -2142,7 +2174,88 @@ async function exportExcel(){
 
 // Inicialização da aba Relatórios e lembretes de vencimento.
 
-$('addBtn').onclick=()=>{if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
+/* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
+let financeMonth='', financeKind='all';
+const otherIncomeMethods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'];
+async function renderFinancePanel(){
+ try{
+  const [payments,expenses]=await Promise.all([all('payments'),all('expenses')]);
+  const key=financeMonth||localISODate().slice(0,7);
+  const q=normalizeText($('searchInput').value);
+  const inMonth=d=>String(d||'').slice(0,7)===key;
+  const isPaid=e=>e.paymentStatus==='Pago';
+  const isOpen=e=>e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente';
+  // Entradas: recebimentos de serviços (vinculados) e outras entradas (lançadas aqui).
+  const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId,type:p.serviceId?'Serviço':'Outra entrada',status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),raw:p}));
+  // Saídas: despesas pagas no mês (pela data do pagamento) e contas em aberto que vencem no mês.
+  const outs=expenses.filter(e=>isPaid(e)?inMonth(e.date||e.paidAt):(isOpen(e)&&inMonth(e.dueDate))).map(e=>({id:e.id,date:isPaid(e)?(e.date||e.paidAt):e.dueDate,dir:'out',other:false,type:'Saída',status:isPaid(e)?'Pago':'Em aberto',description:e.description||'',person:e.supplier||e.category||'',method:e.payment||'',value:Number(e.value||0)}));
+  const sum=a=>a.reduce((n,x)=>n+x.value,0);
+  const inPaid=ins.filter(x=>x.status==='Pago'), outPaid=outs.filter(x=>x.status==='Pago');
+  const received=sum(inPaid), receivedOther=sum(inPaid.filter(x=>x.other)), receivedServices=received-receivedOther;
+  const spent=sum(outPaid), toReceive=sum(ins.filter(x=>x.status==='Pendente')), toPay=sum(outs.filter(x=>x.status==='Em aberto'));
+  let rows=[...ins,...outs];
+  if(financeKind==='in')rows=rows.filter(x=>x.dir==='in');
+  else if(financeKind==='out')rows=rows.filter(x=>x.dir==='out');
+  else if(financeKind==='other')rows=rows.filter(x=>x.other);
+  if(q)rows=rows.filter(x=>normalizeText([x.description,x.person,x.method,x.type,x.status].join(' ')).includes(q));
+  rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const shown=rows.slice(0,300);
+  const chip=(k,label)=>`<button type="button" class="filter-chip ${financeKind===k?'active':''}" data-fkind="${k}">${label}</button>`;
+  const monthLabel=new Date(Number(key.slice(0,4)),Number(key.slice(5,7))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  $('tableWrap').innerHTML=`<div class="finance-toolbar"><label for="financeMonthInput">Mês</label><input type="month" id="financeMonthInput" value="${key}"><button type="button" class="secondary" id="financeThisMonth">Mês atual</button></div>
+   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Resultado do mês</span><strong class="${received-spent<0?'amount-out':'amount-in'}">${money(received-spent)}</strong></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
+   <div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>
+   <p class="muted small">Movimento de ${esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
+   ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
+  $('financeMonthInput').onchange=e=>{financeMonth=e.target.value||'';renderFinancePanel();};
+  $('financeThisMonth').onclick=()=>{financeMonth='';renderFinancePanel();};
+  $('tableWrap').querySelectorAll('[data-fkind]').forEach(b=>b.onclick=()=>{financeKind=b.dataset.fkind;renderFinancePanel();});
+  $('tableWrap').querySelectorAll('[data-fedit]').forEach(b=>b.onclick=()=>{const r=rows.find(x=>x.id===b.dataset.fedit);if(r)renderOtherIncomeForm(r.raw);});
+  $('tableWrap').querySelectorAll('[data-fdel]').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Excluir esta entrada?'))return;
+   try{await remove('payments',b.dataset.fdel);showToast('Entrada excluída.');await renderFinancePanel();await renderStats();await renderFinancialMovement();}
+   catch(err){showToast('Erro ao excluir: '+err.message);}
+  });
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar o financeiro. Verifique a conexão.</div>';console.error(err);}
+}
+
+function renderOtherIncomeForm(item={}){
+ editId=item.id??null;
+ const methods=[...otherIncomeMethods];if(item.method&&!methods.includes(item.method))methods.push(item.method);
+ const statuses=['Pago','Pendente'];if(item.status&&!statuses.includes(item.status))statuses.push(item.status);
+ $('formWrap').style.display='';
+ $('formWrap').innerHTML=`<form id="otherIncomeForm"><h3>${item.id?'Editar entrada':'Nova entrada (outras entradas)'}</h3><div class="form-grid">
+  <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(item.date||localISODate())}"></div>
+  <div class="field"><label>Descrição *</label><input name="description" required value="${esc(item.description||'')}" placeholder="Ex.: venda de produto, aporte, reembolso"></div>
+  <div class="field"><label>Origem / quem pagou</label><input name="client" value="${esc(item.client&&item.client!=='Outras entradas'?item.client:'')}"></div>
+  <div class="field"><label>Forma de pagamento *</label><select name="method" required><option value="">Selecione...</option>${methods.map(o=>`<option ${item.method===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+  <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${item.value!==undefined?esc(decimalText(item.value)):''}" placeholder="0,00"></div>
+  <div class="field"><label>Situação *</label><select name="status" required>${statuses.map(o=>`<option ${(item.status||'Pago')===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+  <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
+ </div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar entrada'}</button></div></form>`;
+ $('formWrap').classList.remove('hidden');
+ const form=$('otherIncomeForm');
+ bindDecimalInput(form.elements.value);
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ form.onsubmit=async e=>{
+  e.preventDefault();
+  const submit=form.querySelector('[type=submit]');submit.disabled=true;
+  try{
+   const d=Object.fromEntries(new FormData(form).entries());
+   const value=decimalValue(d.value);
+   if(!Number.isFinite(value)||value<=0)throw new Error('Informe um valor maior que zero.');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date||''))throw new Error('Informe uma data válida.');
+   const record={...(item.id?item:{}),date:d.date,description:String(d.description||'').trim(),client:String(d.client||'').trim()||'Outras entradas',method:d.method,value,status:d.status,notes:d.notes||'',kind:'outra'};
+   await save('payments',record);
+   $('formWrap').classList.add('hidden');editId=null;
+   showToast('Entrada salva.');
+   await renderFinancePanel();await renderStats();await renderFinancialMovement();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
+  finally{submit.disabled=false;}
+ };
+}
+
+$('addBtn').onclick=()=>{if(active==='payments'){renderOtherIncomeForm();return;}if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
 
 $('refreshBtn').onclick=()=>{
  invalidateCache();
