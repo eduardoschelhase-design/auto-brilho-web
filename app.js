@@ -866,6 +866,7 @@ async function renderTable(){
  if(active==='payables'){await renderPayablesTable();return;}
  if(active==='payments'){await renderFinancePanel();return;}
  if(active==='retorno'){await renderReturnPanel();return;}
+ if(active==='services'){await renderServicesPanel();return;}
 
  const m=modules[active];
 
@@ -1866,7 +1867,7 @@ renderSection=function(){
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':'Buscar neste cadastro…';
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
@@ -1926,9 +1927,10 @@ renderClientVehicleTable=async function(){
   const cards=found.slice(0,30);
   $('tableWrap').innerHTML=(found.length?'':rankingHtml)+extra+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
    <div class="client-vehicles">${vs.length?vs.map(v=>`<div class="client-vehicle-row"><span><b>${esc(normalizePlate(v.plate))}</b> · ${esc([v.brand,v.model,v.type].filter(Boolean).join(' ')||'Veículo')}</span><button class="action" data-editvehicle="${esc(v.id)}">Editar</button></div>`).join(''):'<p class="muted">Nenhum veículo cadastrado.</p>'}</div>
-   <div class="client-actions"><button class="action" data-addvehicle="${esc(c.id)}">+ Veículo</button><button class="action" data-newservice="${esc(c.id)}">Novo serviço</button><button class="action" data-history="${esc(c.id)}">Histórico</button><button class="action danger-action" data-deleteclient="${esc(c.id)}">Excluir cliente</button></div></article>`).join('');
+   <div class="client-actions"><button class="action" data-editclient="${esc(c.id)}">Editar cliente</button><button class="action" data-addvehicle="${esc(c.id)}">+ Veículo</button><button class="action" data-newservice="${esc(c.id)}">Novo serviço</button><button class="action" data-history="${esc(c.id)}">Histórico</button><button class="action danger-action" data-deleteclient="${esc(c.id)}">Excluir cliente</button></div></article>`).join('');
   $('tableWrap').querySelectorAll('[data-addvehicle]').forEach(b=>{const c=cards.find(x=>x.c.id===b.dataset.addvehicle).c;b.onclick=()=>renderClientVehicleForm({addAnother:true,clientId:c.id,clientRecord:c});});
-  $('tableWrap').querySelectorAll('[data-editvehicle]').forEach(b=>{const v=vehicles.find(x=>x.id===b.dataset.editvehicle);const c=clients.find(x=>x.id===v.clientId)||clients.find(x=>sameClient(x.name,v.client));originalRenderClientVehicleForm({...v,clientId:c?.id,clientRecord:c||{name:v.client}});});
+  $('tableWrap').querySelectorAll('[data-editvehicle]').forEach(b=>b.onclick=()=>{const v=vehicles.find(x=>x.id===b.dataset.editvehicle);if(!v)return;const c=clients.find(x=>x.id===v.clientId)||clients.find(x=>sameClient(x.name,v.client));$('formWrap').style.display='';$('formWrap').classList.remove('hidden');renderClientVehicleForm({...v,clientId:c?.id,clientRecord:c||{name:v.client}});});
+  $('tableWrap').querySelectorAll('[data-editclient]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.editclient);if(c)renderClientEditForm(c);});
   $('tableWrap').querySelectorAll('[data-newservice]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.newservice),v=selectedVehicleForClient(c,vehicles);if(!v){showToast('Cadastre um veículo para este cliente antes de lançar o serviço.');return;}active='services';renderTabs();renderSection();renderServiceForm({vehicle:normalizePlate(v.plate)});});
   $('tableWrap').querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.history),ss=services.filter(s=>sameClient(s.client,c.name)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));$('tableWrap').innerHTML=`<div class="history-panel"><button class="secondary" id="backClients">← Voltar</button><h3>Histórico de ${esc(c.name)}</h3><p>Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')} · ${ss.length} serviço(s)</p>${ss.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Veículo</th><th>Serviço</th><th>Valor</th><th>Situação</th></tr></thead><tbody>${ss.map(s=>`<tr><td>${dateBR(s.date)}</td><td>${esc(s.vehicle||'Sem placa')}</td><td>${esc(s.service)}</td><td>${money(s.value)}</td><td>${esc(s.status||'')}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum serviço registrado.</p>'}</div>`;$('backClients').onclick=()=>renderClientVehicleTable();});
   $('tableWrap').querySelectorAll('[data-deleteclient]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.deleteclient);if(!confirm(`Excluir o cadastro de ${c.name}? Os serviços e pagamentos históricos serão preservados, mas os veículos vinculados serão removidos.`))return;try{for(const v of vehicles.filter(x=>x.clientId===c.id||sameClient(x.client,c.name)))await remove('vehicles',v.id);await remove('clients',c.id);showToast('Cadastro excluído. Histórico financeiro e de serviços preservado.');await renderClientVehicleTable();await renderStats();}catch(err){showToast('Erro ao excluir: '+err.message);}});
@@ -2266,7 +2268,7 @@ function readyMessage(service,car){
  const first=String(service.client||'').trim().split(/\s+/)[0]||'cliente';
  return `Olá, ${first}! Seu ${car||'veículo'}${service.vehicle?' ('+service.vehicle+')':''} está pronto para retirada na Auto Brilho. 🚗✨ Pode vir buscar quando quiser!`;
 }
-function readyLink(phone,service,car){return phone?`https://wa.me/${phone}?text=${encodeURIComponent(readyMessage(service,car))}`:'';}
+function readyLink(phone,service,car){return phone?waUrl(phone,readyMessage(service,car)):'';}
 async function readyContext(){const [clients,vehicles]=await Promise.all([all('clients'),all('vehicles')]);return {clients,vehicles};}
 function readyLinkFor(ctx,service){
  const c=ctx.clients.find(x=>sameClient(x.name,service.client)&&waPhone(x.phone))||ctx.clients.find(x=>sameClient(x.name,service.client));
@@ -2284,8 +2286,126 @@ async function showReadyNotice(service){
  let href='';
  try{href=readyLinkFor(await readyContext(),service);}catch(e){console.error(e);}
  $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
- $('formWrap').innerHTML=`<div class="ready-notice"><h3>Serviço salvo: pronto para retirada</h3><p>${esc(service.client||'')} · ${esc(service.vehicle||'')}</p><div class="return-actions">${href?`<a class="wa-link" target="_blank" rel="noopener" href="${href}">Avisar cliente no WhatsApp</a>`:'<span class="wa-link disabled">Cliente sem telefone válido</span>'}<button type="button" class="secondary" id="closeReadyNotice">Fechar</button></div></div>`;
+ $('formWrap').innerHTML=`<div class="ready-notice"><h3>Serviço salvo: pronto para retirada</h3><p>${esc(service.client||'')} · ${esc(service.vehicle||'')}</p><div class="return-actions">${href?`<a class="wa-link" ${waAnchor(href)}>Avisar cliente no WhatsApp</a>`:'<span class="wa-link disabled">Cliente sem telefone válido</span>'}<button type="button" class="secondary" id="closeReadyNotice">Fechar</button></div></div>`;
  $('closeReadyNotice').onclick=()=>{$('formWrap').classList.add('hidden');$('formWrap').innerHTML='';};
+}
+
+/* ===== v22: Serviços do dia, WhatsApp Business e edição de cliente ===== */
+function waAppPref(){try{return localStorage.getItem('ab_wa_app')||'business';}catch(e){return 'business';}}
+function waUrl(phone,text){
+ // No Android, o link abre direto o WhatsApp Business (com retorno ao WhatsApp comum se ele não estiver instalado).
+ // No iPhone e no computador o sistema escolhe o app; não há como forçar o Business por link.
+ const web='https://wa.me/'+phone+'?text='+encodeURIComponent(text);
+ const ua=(typeof navigator!=='undefined'&&navigator.userAgent)||'';
+ if(waAppPref()==='business'&&/Android/i.test(ua))return 'intent://send?phone='+phone+'&text='+encodeURIComponent(text)+'#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url='+encodeURIComponent(web)+';end';
+ return web;
+}
+const waAnchor=url=>`href="${esc(url)}"${/^https?:/.test(url)?' target="_blank" rel="noopener"':''}`;
+
+let svcRange='today', svcDay='', svcStatus='all';
+const SVC_ORDER=['Aguardando','Em andamento',READY_STATUS,'Concluído','Cancelado'];
+const SVC_NEXT={'Aguardando':'Em andamento','Em andamento':READY_STATUS};
+const SVC_NEXT_LABEL={'Aguardando':'Iniciar','Em andamento':'Marcar pronto',[READY_STATUS]:'Concluir e receber'};
+function addDaysISO(iso,n){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function svcBounds(){
+ const today=localISODate();
+ if(svcRange==='day'&&svcDay)return [svcDay,svcDay];
+ if(svcRange==='yesterday'){const y=addDaysISO(today,-1);return [y,y];}
+ if(svcRange==='week')return [addDaysISO(today,-6),today];
+ if(svcRange==='month')return [today.slice(0,7)+'-01',today.slice(0,7)+'-31'];
+ if(svcRange==='all')return ['',''];
+ return [today,today];
+}
+async function renderServicesPanel(){
+ try{
+  const services=await all('services');
+  const rawQ=$('searchInput').value, q=normalizeText(rawQ), plateQ=normalizePlate(rawQ);
+  const searching=!!q;
+  const [from,to]=svcBounds();
+  const stOf=s=>s.status||'Concluído';
+  const inRange=s=>!from||(String(s.date||'')>=from&&String(s.date||'')<=to);
+  const base=services.filter(s=>searching?(normalizeText([s.client,s.vehicle,s.service].join(' ')).includes(q)||(plateQ.length>=3&&normalizePlate(s.vehicle).includes(plateQ))):inRange(s));
+  const cnt=st=>base.filter(s=>stOf(s)===st).length;
+  const open=base.filter(s=>['Aguardando','Em andamento',READY_STATUS].includes(stOf(s)));
+  const done=base.filter(s=>stOf(s)==='Concluído');
+  const sum=a=>a.reduce((n,s)=>n+Number(s.value||0),0);
+  const cmp=(a,b)=>{const oa=SVC_ORDER.indexOf(stOf(a)),ob=SVC_ORDER.indexOf(stOf(b));if(oa!==ob)return oa-ob;const ka=String(a.createdAt||a.date||''),kb=String(b.createdAt||b.date||'');return oa<3?ka.localeCompare(kb):kb.localeCompare(ka);};
+  const list=base.filter(s=>svcStatus==='all'||stOf(s)===svcStatus).sort(cmp);
+  const shown=list.slice(0,100);
+  const links=await buildReadyLinks(shown);
+  const rangeChip=(k,label)=>`<button type="button" class="filter-chip ${!searching&&svcRange===k?'active':''}" data-srange="${k}">${label}</button>`;
+  const stChip=(k,label,n)=>`<button type="button" class="filter-chip ${svcStatus===k?'active':''}" data-sstatus="${k}">${label} (${n})</button>`;
+  const multiDay=searching||from!==to;
+  const rangeLabel=searching?'todas as datas (busca)':svcRange==='today'?'hoje':svcRange==='yesterday'?'ontem':svcRange==='week'?'últimos 7 dias':svcRange==='month'?'este mês':svcRange==='all'?'todo o período':dateBR(svcDay);
+  const money$=!isEmployee();
+  $('tableWrap').innerHTML=`<div class="filter-chips">${rangeChip('today','Hoje')}${rangeChip('yesterday','Ontem')}${rangeChip('week','7 dias')}${rangeChip('month','Mês')}${rangeChip('all','Todos')}<input type="date" id="svcDayInput" class="svc-day" value="${esc(svcRange==='day'?svcDay:'')}" aria-label="Escolher data"></div>
+   <div class="dashboard-metrics compact" style="margin-bottom:10px"><div class="dashboard-metric"><span>Serviços (${esc(rangeLabel)})</span><strong>${base.length-cnt('Cancelado')}</strong></div><div class="dashboard-metric"><span>No pátio agora</span><strong>${open.length}</strong></div>${money$?`<div class="dashboard-metric"><span>Concluídos</span><strong>${money(sum(done))}</strong></div><div class="dashboard-metric"><span>A receber</span><strong>${money(sum(done.filter(s=>s.paymentStatus==='Pendente')))}</strong></div>`:''}</div>
+   <div class="filter-chips chips-scroll">${stChip('all','Todos',base.length)}${stChip('Aguardando','Aguardando',cnt('Aguardando'))}${stChip('Em andamento','Em andamento',cnt('Em andamento'))}${stChip(READY_STATUS,'Prontos',cnt(READY_STATUS))}${stChip('Concluído','Concluídos',cnt('Concluído'))}${stChip('Cancelado','Cancelados',cnt('Cancelado'))}</div>
+   ${shown.length?`<div class="svc-list">${shown.map(s=>{
+    const st=stOf(s),ex=Array.isArray(s.extras)&&s.extras.length?` <span class="muted">(+ ${esc(s.extras.map(x=>x.description).join(', '))})</span>`:'';
+    const next=st===READY_STATUS?'Concluir e receber':SVC_NEXT[st]?SVC_NEXT_LABEL[st]:'';
+    const pay=st==='Concluído'?[s.paymentStatus,s.paymentMethod].filter(Boolean).join(' · '):'';
+    return `<article class="svc-card"><div class="svc-head"><strong>${esc(normalizePlate(s.vehicle)||s.vehicle||'Sem placa')}</strong><span class="status-badge st-${normalizeText(st).replace(/[^a-z]+/g,'-')}">${esc(st)}</span></div><div>${esc(s.client||'Cliente não informado')} · ${esc(s.service||'Serviço')}${ex}</div><div class="muted small">${multiDay?dateBR(s.date)+' · ':''}${money(s.value)}${pay?' · '+esc(pay):''}</div><div class="svc-actions">${next?`<button type="button" class="primary small-btn" data-svc-next="${esc(s.id)}">${next}</button>`:''}${links.get(s.id)?`<a class="action wa-small" ${waAnchor(links.get(s.id))}>Avisar cliente</a>`:''}<button type="button" class="action" data-svc-edit="${esc(s.id)}">Editar</button><button type="button" class="action" data-delete="${esc(s.id)}">Excluir</button></div></article>`;}).join('')}</div>${list.length>shown.length?`<p class="muted small">Mostrando 100 de ${list.length}. Use a busca ou o filtro de data para refinar.</p>`:''}`:`<div class="empty">${searching?'Nenhum serviço encontrado para esta busca.':'Nenhum serviço neste período. Toque em “+ Novo serviço” para lançar.'}</div>`}`;
+  const again=()=>renderServicesPanel();
+  $('tableWrap').querySelectorAll('[data-srange]').forEach(b=>b.onclick=()=>{svcRange=b.dataset.srange;svcDay='';$('searchInput').value='';again();});
+  $('svcDayInput').onchange=e=>{if(e.target.value){svcDay=e.target.value;svcRange='day';$('searchInput').value='';again();}};
+  $('tableWrap').querySelectorAll('[data-sstatus]').forEach(b=>b.onclick=()=>{svcStatus=b.dataset.sstatus;again();});
+  $('tableWrap').querySelectorAll('[data-svc-edit]').forEach(b=>b.onclick=()=>{const s=services.find(x=>x.id===b.dataset.svcEdit);if(s)renderForm(s);});
+  $('tableWrap').querySelectorAll('[data-svc-next]').forEach(b=>b.onclick=async()=>{
+   const s=services.find(x=>x.id===b.dataset.svcNext);if(!s)return;
+   const next=SVC_NEXT[stOf(s)];
+   if(!next){renderForm({...s,status:'Concluído'});return;} // Pronto -> Concluído pede os dados do pagamento
+   b.disabled=true;
+   try{
+    const saved=await save('services',{...s,status:next,...(isEmployee()?{financeSyncPending:true}:{})});
+    showToast(next===READY_STATUS?'Serviço pronto para retirada.':'Serviço em andamento.');
+    if(next===READY_STATUS)await showReadyNotice(saved);
+    await again();
+   }catch(err){showToast('Não foi possível atualizar: '+(err.message||'verifique a conexão.'));b.disabled=false;}
+  });
+  $('tableWrap').querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Deseja realmente excluir este serviço da nuvem?'))return;
+   try{await cancelLinkedServicePayment(b.dataset.delete);await remove('services',b.dataset.delete);showToast('Serviço excluído.');await again();if(!isEmployee())await renderStats();}
+   catch(err){showToast('Erro ao excluir: '+err.message);}
+  });
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os serviços. Verifique a conexão.</div>';console.error(err);}
+}
+
+function renderClientEditForm(c){
+ editId=c.id;
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
+ $('formWrap').innerHTML=`<form id="clientEditForm"><h3>Editar cliente</h3><div class="form-grid">
+  <div class="field"><label>Nome completo *</label><input name="name" required value="${esc(c.name||'')}"></div>
+  <div class="field"><label>Telefone / WhatsApp</label><input name="phone" type="tel" value="${esc(c.phone||'')}"></div>
+  <div class="field"><label>Data de cadastramento</label><input name="registrationDate" type="date" value="${esc(c.registrationDate||'')}"></div>
+  <div class="field"><label>E-mail</label><input name="email" type="email" value="${esc(c.email||'')}"></div>
+  <div class="field"><label>CPF / CNPJ</label><input name="document" value="${esc(c.document||'')}"></div>
+  <div class="field"><label>Endereço</label><input name="address" value="${esc(c.address||'')}"></div>
+  <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(c.notes||'')}</textarea></div>
+ </div><p class="muted small">Se o nome for alterado, os veículos e o histórico de serviços deste cliente passam a usar o novo nome.</p>
+ <div class="form-actions"><button type="button" class="secondary" id="cancelClientEdit">Cancelar</button><button class="primary" type="submit">Salvar alterações</button></div></form>`;
+ const form=$('clientEditForm');
+ $('cancelClientEdit').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ form.onsubmit=async e=>{
+  e.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;
+  try{
+   const d=Object.fromEntries(new FormData(form).entries());
+   const newName=String(d.name||'').trim();if(!newName)throw new Error('Informe o nome do cliente.');
+   const clients=await all('clients');
+   if(clients.some(x=>x.id!==c.id&&sameClient(x.name,newName))&&!confirm(`Já existe outro cliente chamado “${newName}”. Salvar mesmo assim?`)){btn.disabled=false;return;}
+   const renamed=!sameClient(c.name,newName);
+   await save('clients',{...c,name:newName,phone:d.phone||'',registrationDate:d.registrationDate||'',email:d.email||'',document:d.document||'',address:d.address||'',notes:d.notes||''});
+   if(renamed||String(c.name||'').trim()!==newName){
+    showToast('Atualizando o histórico do cliente...');
+    const [vs,ss,ps]=await Promise.all([all('vehicles'),all('services'),all('payments')]);
+    for(const v of vs.filter(x=>x.clientId===c.id||sameClient(x.client,c.name)))await save('vehicles',{...v,client:newName,clientId:c.id});
+    for(const s of ss.filter(x=>sameClient(x.client,c.name)))await save('services',{...s,client:newName});
+    for(const p of ps.filter(x=>sameClient(x.client,c.name)))await save('payments',{...p,client:newName});
+   }
+   $('formWrap').classList.add('hidden');editId=null;showToast('Cliente atualizado.');
+   await renderClientVehicleTable();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));btn.disabled=false;}
+ };
 }
 
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
@@ -2323,7 +2443,7 @@ const pctText=v=>String(Number(v||0)).replace('.',',');
   const settingsHtml=`<details class="return-editor" ${financeCfgOpen?'open':''}><summary>Taxas de cartão e meta do mês</summary><div class="form-grid" style="margin-top:10px"><div class="field"><label>Taxa Pix (%)</label><input id="feePix" inputmode="decimal" value="${pctText(appSettings.fees['Pix'])}"></div><div class="field"><label>Taxa cartão geral (%)</label><input id="feeCard" inputmode="decimal" value="${pctText(appSettings.fees['Cartão'])}"></div><div class="field"><label>Taxa débito (%)</label><input id="feeDebit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de débito'])}"></div><div class="field"><label>Taxa crédito (%)</label><input id="feeCredit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de crédito'])}"></div><div class="field"><label>Contabilizar taxas a partir de</label><input id="feesSince" type="date" value="${esc(appSettings.feesSince||localISODate())}"></div><div class="field"><label>Meta de faturamento do mês (R$)</label><input id="goalMonthly" inputmode="decimal" value="${appSettings.goal.monthly?decimalText(appSettings.goal.monthly):''}" placeholder="0,00"></div></div><div class="return-actions"><button type="button" class="secondary" id="saveSettingsBtn">Salvar</button></div><p class="muted small">As taxas valem para novos recebimentos (os já registrados mantêm a taxa da época). As configurações ficam salvas na sua conta e valem em todos os aparelhos.</p></details>`;
   $('tableWrap').innerHTML=`<div class="finance-toolbar"><label for="financeMonthInput">Mês</label><input type="month" id="financeMonthInput" value="${key}"><button type="button" class="secondary" id="financeThisMonth">Mês atual</button></div>
    ${settingsHtml}
-   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
+   <div class="dashboard-metrics compact" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
    <div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>
    <p class="muted small">Movimento de ${esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
    ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}${r.fee>0?' · taxa '+money(r.fee):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
@@ -2423,13 +2543,14 @@ async function renderReturnPanel(){
   const noPhone=pending.filter(e=>!e.phone).length;
   $('tableWrap').innerHTML=`<div class="filter-chips">${chip(30,'30+ dias')}${chip(45,'45+ dias')}${chip(60,'60+ dias')}${chip(90,'90+ dias')}<button type="button" class="filter-chip ${returnShowContacted?'active':''}" data-rcontacted="1">Contatados (${contacted.length})</button></div>
    <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Para reativar (${returnDays}+ dias)</span><strong>${pending.length}</strong></div>${isEmployee()?'':`<div class="dashboard-metric"><span>Já gastaram no total</span><strong>${money(pending.reduce((n,e)=>n+e.total,0))}</strong></div>`}<div class="dashboard-metric"><span>Sem telefone válido</span><strong>${noPhone}</strong></div></div>
-   <details class="return-editor" ${returnEditorOpen?'open':''}><summary>Mensagem do WhatsApp</summary><textarea id="returnMsg" rows="4">${esc(template)}</textarea><p class="muted small">Use {nome}, {veiculo} e {dias}. A mensagem fica salva neste aparelho.</p><div class="return-actions"><button type="button" class="secondary" id="returnMsgSave">Salvar mensagem</button><button type="button" class="secondary" id="returnMsgReset">Restaurar padrão</button></div></details>
+   <details class="return-editor" ${returnEditorOpen?'open':''}><summary>Mensagem do WhatsApp</summary><textarea id="returnMsg" rows="4">${esc(template)}</textarea><p class="muted small">Use {nome}, {veiculo} e {dias}. A mensagem fica salva neste aparelho.</p><div class="field"><label for="waAppSelect">Abrir mensagens em</label><select id="waAppSelect"><option value="business" ${waAppPref()==="business"?"selected":""}>WhatsApp Business</option><option value="comum" ${waAppPref()==="comum"?"selected":""}>WhatsApp comum</option></select></div><div class="return-actions"><button type="button" class="secondary" id="returnMsgSave">Salvar mensagem</button><button type="button" class="secondary" id="returnMsgReset">Restaurar padrão</button></div></details>
    <p class="muted small">${returnShowContacted?'Clientes contatados nos últimos 15 dias.':'Clientes que não voltam há '+returnDays+' dias ou mais, dos que mais vieram para os que menos vieram. Ao tocar em WhatsApp o cliente é marcado como contatado por 15 dias.'}</p>
-   ${shown.length?`<div class="return-list">${shown.map(e=>`<article class="return-card"><h4>${esc(e.c.name)}</h4><div class="muted small">${e.gap} dias sem voltar · último serviço em ${dateBR(e.last.date)} (${esc(e.last.service||'serviço')})</div><div class="muted small">${e.count} visita(s)${isEmployee()?'':' · '+money(e.total)}${e.vehicle?' · '+esc([e.vehicle.brand,e.vehicle.model,e.vehicle.plate].filter(Boolean).join(' ')):(e.last.vehicle?' · '+esc(e.last.vehicle):'')}</div><div class="return-actions">${e.phone?`<a class="wa-link" data-wa="${esc(e.c.id)}" target="_blank" rel="noopener" href="https://wa.me/${e.phone}?text=${encodeURIComponent(returnMessage(template,e))}">WhatsApp</a>`:'<span class="wa-link disabled">Sem telefone válido</span>'}${e.contacted?`<button type="button" class="action" data-runcontact="${esc(e.c.id)}">Desfazer contato</button>`:''}</div></article>`).join('')}</div>${list.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${list.length}. Use a busca para refinar.</p>`:''}`:`<div class="empty">${returnShowContacted?'Nenhum cliente contatado recentemente.':'Nenhum cliente nesse período. Bom sinal!'}</div>`}`;
+   ${shown.length?`<div class="return-list">${shown.map(e=>`<article class="return-card"><h4>${esc(e.c.name)}</h4><div class="muted small">${e.gap} dias sem voltar · último serviço em ${dateBR(e.last.date)} (${esc(e.last.service||'serviço')})</div><div class="muted small">${e.count} visita(s)${isEmployee()?'':' · '+money(e.total)}${e.vehicle?' · '+esc([e.vehicle.brand,e.vehicle.model,e.vehicle.plate].filter(Boolean).join(' ')):(e.last.vehicle?' · '+esc(e.last.vehicle):'')}</div><div class="return-actions">${e.phone?`<a class="wa-link" data-wa="${esc(e.c.id)}" ${waAnchor(waUrl(e.phone,returnMessage(template,e)))}>WhatsApp</a>`:'<span class="wa-link disabled">Sem telefone válido</span>'}${e.contacted?`<button type="button" class="action" data-runcontact="${esc(e.c.id)}">Desfazer contato</button>`:''}</div></article>`).join('')}</div>${list.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${list.length}. Use a busca para refinar.</p>`:''}`:`<div class="empty">${returnShowContacted?'Nenhum cliente contatado recentemente.':'Nenhum cliente nesse período. Bom sinal!'}</div>`}`;
   const rerender=()=>renderReturnPanel();
   $('tableWrap').querySelectorAll('[data-rdays]').forEach(b=>b.onclick=()=>{returnDays=Number(b.dataset.rdays);rerender();});
   const cb=$('tableWrap').querySelector('[data-rcontacted]');if(cb)cb.onclick=()=>{returnShowContacted=!returnShowContacted;rerender();};
   $('returnMsgSave').onclick=()=>{const v=$('returnMsg').value.trim();try{localStorage.setItem('ab_retorno_msg',v||RETURN_DEFAULT_MSG);showToast('Mensagem salva neste aparelho.');}catch(e){showToast('Não foi possível salvar a mensagem neste aparelho.');}returnEditorOpen=true;rerender();};
+  $('waAppSelect').onchange=e=>{try{localStorage.setItem('ab_wa_app',e.target.value);}catch(err){}returnEditorOpen=true;rerender();};
   $('returnMsgReset').onclick=()=>{try{localStorage.removeItem('ab_retorno_msg');}catch(e){}returnEditorOpen=true;rerender();};
   const mark=async(id,value)=>{const e=entries.find(x=>x.c.id===id);if(!e)return;try{await save('clients',{...e.c,lastContactAt:value});}catch(err){showToast('Não foi possível registrar o contato: '+err.message);}};
   $('tableWrap').querySelectorAll('[data-wa]').forEach(a=>a.addEventListener('click',async()=>{await mark(a.dataset.wa,today);setTimeout(rerender,800);}));

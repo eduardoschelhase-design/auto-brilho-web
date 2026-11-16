@@ -98,3 +98,25 @@ button{font-family:inherit}button:focus-visible{outline:2px solid #ff6570;outlin
 .ready-notice h3{margin:0 0 6px}
 a.wa-small{display:inline-block;text-decoration:none;background:#1f7a3d;color:#fff}
 body.role-funcionario [data-delete],body.role-funcionario [data-deleteclient],body.role-funcionario [data-fdel]{display:none!important}
+.svc-list{display:grid;gap:10px}
+.svc-card{border:1px solid var(--line);background:#19191b;border-radius:14px;padding:12px 14px;display:grid;gap:5px}
+.svc-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.svc-head strong{font-size:17px;letter-spacing:.5px}
+.svc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.small-btn{padding:9px 14px;font-size:14px}
+.svc-day{background:#19191b;border:1px solid var(--line);border-radius:999px;color:#f4f4f5;padding:8px 12px;font-size:13px}
+.status-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-aguardando{background:#3a3320;color:#ffd987}
+.st-em-andamento{background:#1d3350;color:#9cc8ff}
+.st-pronto-para-retirada{background:#1b4429;color:#8fe3a6}
+.st-concluido{background:#2a2a2d;color:#d2d2d6}
+.st-cancelado{background:#4a1d1d;color:#ffb4b4}
+
+.dashboard-metrics.compact{grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px}
+.dashboard-metrics.compact .dashboard-metric{padding:9px 10px;gap:4px}
+.dashboard-metrics.compact .dashboard-metric strong{font-size:15px}
+.dashboard-metrics.compact .dashboard-metric span{font-size:10.5px}
+.chips-scroll{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.chips-scroll .filter-chip{flex:0 0 auto;white-space:nowrap}
+.svc-day{max-width:150px;padding:7px 10px}
+.dashboard-metrics.compact .dashboard-metric strong{font-size:14px;overflow-wrap:normal;white-space:nowrap}

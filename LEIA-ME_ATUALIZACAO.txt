@@ -1,3 +1,32 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v22 (sobre a v21)
+
+SE ALGO DER ERRADO: volte ao ZIP da v21 e avise qual tela falhou.
+
+1) ABA SERVIÇOS — SERVIÇOS DO DIA
+- Abre em "Hoje". Filtros de data: Hoje, Ontem, 7 dias, Mês, Todos ou escolher uma data.
+- Filtros por etapa: Aguardando, Em andamento, Prontos, Concluídos, Cancelados (com contagem).
+- Cartões em vez de tabela: placa em destaque, cliente, serviço (+ extras), valor e etapa colorida.
+  Ordem: fila do pátio primeiro (Aguardando, Em andamento, Pronto) e depois Concluídos.
+- Botão de avanço rápido: Iniciar -> Marcar pronto (abre o aviso de WhatsApp) -> Concluir e receber
+  (abre o formulário já em Concluído para informar o pagamento).
+- Resumo do dia: serviços, no pátio agora, concluídos e a receber (o funcionário não vê os valores).
+- A busca (placa, cliente ou serviço) procura em todas as datas.
+
+2) CADASTRO
+- Corrigido: o botão Editar do veículo não abria (o formulário era montado antes do clique). Agora abre.
+- Novo botão "Editar cliente" (nome, telefone, e-mail, CPF/CNPJ, endereço, observações).
+  Se o nome mudar, veículos e histórico de serviços/pagamentos passam a usar o novo nome.
+
+3) WHATSAPP BUSINESS
+- No Android, os botões abrem direto o WhatsApp Business (se não estiver instalado, abre o link comum).
+- Em Retorno > "Mensagem do WhatsApp" há a opção "Abrir mensagens em": WhatsApp Business ou comum
+  (salva por aparelho). No iPhone e no computador o sistema escolhe o app; não há como forçar por link.
+
+4) LAYOUT: faixa de resumo compacta e filtros de etapa em linha rolável em Serviços e Financeiro.
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v22). Não mexa no config.js.
+
+--- v21 ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v21 (sobre a v19; inclui o Retorno da v20)
 
 SE ALGO DER ERRADO: volte ao ZIP da última versão que funcionava (v19) e avise qual tela falhou.
