@@ -120,3 +120,14 @@ body.role-funcionario [data-delete],body.role-funcionario [data-deleteclient],bo
 .chips-scroll .filter-chip{flex:0 0 auto;white-space:nowrap}
 .svc-day{max-width:150px;padding:7px 10px}
 .dashboard-metrics.compact .dashboard-metric strong{font-size:14px;overflow-wrap:normal;white-space:nowrap}
+
+.danger-zone{margin-top:18px;border:1px solid #6b2a2a;background:#241616;border-radius:14px;padding:14px}
+.danger-zone h3{margin:0 0 6px;color:#ffb4b4}
+.reset-panel{margin-top:12px}
+.reset-panel ol{padding-left:20px;line-height:1.9}
+.reset-modes label{display:block;margin:6px 0}
+#resetGo:disabled{opacity:.45}
+
+.dup-bar{margin:0 0 12px}
+.dup-member{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}
+.dup-member input{margin-top:4px}

@@ -713,6 +713,10 @@ function renderClientVehicleForm(vehicle={}){
      (doc&&String(c.document||'').replace(/\D/g,'')===doc) ||
      (phone&&String(c.phone||'').replace(/\D/g,'')===phone)
     );
+    if(!client){
+     const sameName=clients.find(c=>sameClient(c.name,d.name));
+     if(sameName&&confirm(`Já existe um cliente chamado “${sameName.name}”.\n\nOK: usar o cadastro existente (evita duplicar).\nCancelar: criar um novo cadastro mesmo assim.`))client=sameName;
+    }
    }
 
    const clientData={
@@ -726,7 +730,9 @@ function renderClientVehicleForm(vehicle={}){
    };
 
    if(client){
+    const oldName=client.name;
     await save('clients',{...client,...clientData});
+    if(!sameClient(oldName,clientData.name))await cascadeClientRename(client.id,oldName,clientData.name);
    }else{
     client=await save('clients',clientData);
    }
@@ -757,6 +763,7 @@ function renderClientVehicleForm(vehicle={}){
      ...vehicleData,
      id:editingVehicleId
     });
+    if(existingVehicle&&normalizePlate(existingVehicle.plate)!==plate)await cascadePlateChange(existingVehicle.plate,plate);
    }else{
     await save('vehicles',vehicleData);
    }
@@ -1588,8 +1595,10 @@ async function backupJSON(){
   URL.revokeObjectURL(url);
 
 showToast('Backup gerado com sucesso.');
+  return true;
  }catch(e){
   showToast('Erro ao gerar backup: '+e.message);
+  return false;
  }
 }
 let realtimeRefreshTimer=null,realtimeRefreshBusy=false;
@@ -1852,11 +1861,13 @@ renderTabs=function(){
 
 renderSection=function(){
  if(isEmployee()&&!EMPLOYEE_TABS.includes(active))active='services';
+ if(active!=='clients')cadastroView='list';
  // Ao entrar/trocar de seção, descarta qualquer formulário anterior.
  // Os campos de Cadastro só são recriados pelo botão + Novo cliente.
  $('formWrap').innerHTML='';
  $('formWrap').classList.add('hidden');
  $('formWrap').style.display='none';
+ $('resetPanel').classList.add('hidden');$('resetPanel').innerHTML='';
  const reports=active==='reports',home=active==='home',dashboard=active==='dashboard';
  $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
  $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
@@ -1906,6 +1917,7 @@ renderClientVehicleTable=async function(){
  try{
   const [clients,vehicles,services]=await Promise.all([all('clients'),all('vehicles'),all('services')]);
   const rawQ=$('searchInput').value, q=normalizeText(rawQ), plateQ=normalizePlate(rawQ);
+  if(cadastroView==='dups'){await renderDuplicatesPanel();return;}
   // Índices montados uma única vez (antes: cada cliente filtrava todos os veículos e serviços).
   const vehiclesById=new Map(), vehiclesByName=new Map(), servicesByName=new Map();
   const push=(map,key,item)=>{if(!key)return;const list=map.get(key);if(list)list.push(item);else map.set(key,[item]);};
@@ -1925,12 +1937,15 @@ renderClientVehicleTable=async function(){
    extra='<p class="muted">Digite o nome do cliente ou a placa do veículo para localizar um cadastro.</p>';
   }
   const cards=found.slice(0,30);
-  $('tableWrap').innerHTML=(found.length?'':rankingHtml)+extra+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
+  const dupCount=isEmployee()?0:findDuplicateGroups(clients,vehicles).filter(g=>!dupIgnored().has(g.id)).length;
+  const dupBar=dupCount?`<div class="dup-bar"><button type="button" class="action" id="openDups">⚠ Cadastros duplicados (${dupCount})</button></div>`:'';
+  $('tableWrap').innerHTML=dupBar+(found.length?'':rankingHtml)+extra+cards.map(({c,vs,ss})=>`<article class="client-card"><div class="client-card-head"><div><h3>${esc(c.name)}</h3><p>${esc(c.phone||'Telefone não informado')} · Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')}</p><small>${ss.length} serviço(s) no histórico</small></div><strong>${ss.length}x</strong></div>
    <div class="client-vehicles">${vs.length?vs.map(v=>`<div class="client-vehicle-row"><span><b>${esc(normalizePlate(v.plate))}</b> · ${esc([v.brand,v.model,v.type].filter(Boolean).join(' ')||'Veículo')}</span><button class="action" data-editvehicle="${esc(v.id)}">Editar</button></div>`).join(''):'<p class="muted">Nenhum veículo cadastrado.</p>'}</div>
    <div class="client-actions"><button class="action" data-editclient="${esc(c.id)}">Editar cliente</button><button class="action" data-addvehicle="${esc(c.id)}">+ Veículo</button><button class="action" data-newservice="${esc(c.id)}">Novo serviço</button><button class="action" data-history="${esc(c.id)}">Histórico</button><button class="action danger-action" data-deleteclient="${esc(c.id)}">Excluir cliente</button></div></article>`).join('');
   $('tableWrap').querySelectorAll('[data-addvehicle]').forEach(b=>{const c=cards.find(x=>x.c.id===b.dataset.addvehicle).c;b.onclick=()=>renderClientVehicleForm({addAnother:true,clientId:c.id,clientRecord:c});});
   $('tableWrap').querySelectorAll('[data-editvehicle]').forEach(b=>b.onclick=()=>{const v=vehicles.find(x=>x.id===b.dataset.editvehicle);if(!v)return;const c=clients.find(x=>x.id===v.clientId)||clients.find(x=>sameClient(x.name,v.client));$('formWrap').style.display='';$('formWrap').classList.remove('hidden');renderClientVehicleForm({...v,clientId:c?.id,clientRecord:c||{name:v.client}});});
   $('tableWrap').querySelectorAll('[data-editclient]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.editclient);if(c)renderClientEditForm(c);});
+  const openDups=$('openDups');if(openDups)openDups.onclick=()=>{cadastroView='dups';renderClientVehicleTable();};
   $('tableWrap').querySelectorAll('[data-newservice]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.newservice),v=selectedVehicleForClient(c,vehicles);if(!v){showToast('Cadastre um veículo para este cliente antes de lançar o serviço.');return;}active='services';renderTabs();renderSection();renderServiceForm({vehicle:normalizePlate(v.plate)});});
   $('tableWrap').querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>{const c=clients.find(x=>x.id===b.dataset.history),ss=services.filter(s=>sameClient(s.client,c.name)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));$('tableWrap').innerHTML=`<div class="history-panel"><button class="secondary" id="backClients">← Voltar</button><h3>Histórico de ${esc(c.name)}</h3><p>Cadastro: ${dateBR(c.registrationDate)||(!c.importKey&&c.createdAt?dateBR(String(c.createdAt).slice(0,10)):'data não informada')} · ${ss.length} serviço(s)</p>${ss.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Veículo</th><th>Serviço</th><th>Valor</th><th>Situação</th></tr></thead><tbody>${ss.map(s=>`<tr><td>${dateBR(s.date)}</td><td>${esc(s.vehicle||'Sem placa')}</td><td>${esc(s.service)}</td><td>${money(s.value)}</td><td>${esc(s.status||'')}</td></tr>`).join('')}</tbody></table></div>`:'<p>Nenhum serviço registrado.</p>'}</div>`;$('backClients').onclick=()=>renderClientVehicleTable();});
   $('tableWrap').querySelectorAll('[data-deleteclient]').forEach(b=>b.onclick=async()=>{const c=clients.find(x=>x.id===b.dataset.deleteclient);if(!confirm(`Excluir o cadastro de ${c.name}? Os serviços e pagamentos históricos serão preservados, mas os veículos vinculados serão removidos.`))return;try{for(const v of vehicles.filter(x=>x.clientId===c.id||sameClient(x.client,c.name)))await remove('vehicles',v.id);await remove('clients',c.id);showToast('Cadastro excluído. Histórico financeiro e de serviços preservado.');await renderClientVehicleTable();await renderStats();}catch(err){showToast('Erro ao excluir: '+err.message);}});
@@ -2395,17 +2410,189 @@ function renderClientEditForm(c){
    if(clients.some(x=>x.id!==c.id&&sameClient(x.name,newName))&&!confirm(`Já existe outro cliente chamado “${newName}”. Salvar mesmo assim?`)){btn.disabled=false;return;}
    const renamed=!sameClient(c.name,newName);
    await save('clients',{...c,name:newName,phone:d.phone||'',registrationDate:d.registrationDate||'',email:d.email||'',document:d.document||'',address:d.address||'',notes:d.notes||''});
-   if(renamed||String(c.name||'').trim()!==newName){
-    showToast('Atualizando o histórico do cliente...');
-    const [vs,ss,ps]=await Promise.all([all('vehicles'),all('services'),all('payments')]);
-    for(const v of vs.filter(x=>x.clientId===c.id||sameClient(x.client,c.name)))await save('vehicles',{...v,client:newName,clientId:c.id});
-    for(const s of ss.filter(x=>sameClient(x.client,c.name)))await save('services',{...s,client:newName});
-    for(const p of ps.filter(x=>sameClient(x.client,c.name)))await save('payments',{...p,client:newName});
-   }
+   if(renamed){showToast('Atualizando o histórico do cliente...');await cascadeClientRename(c.id,c.name,newName);}
    $('formWrap').classList.add('hidden');editId=null;showToast('Cliente atualizado.');
    await renderClientVehicleTable();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));btn.disabled=false;}
  };
+}
+
+/* ===== v23: zerar dados (somente dono) ===== */
+const RESET_LABELS={services:'serviços',payments:'pagamentos',expenses:'despesas e contas a pagar',appointments:'agendamentos',vehicles:'veículos',clients:'clientes'};
+const RESET_ORDER_KEEP=['services','payments','expenses','appointments'];
+const RESET_ORDER_ALL=[...RESET_ORDER_KEEP,'vehicles','clients'];
+async function wipeData(mode,onStatus){
+ if(isEmployee())throw new Error('Somente o dono pode zerar os dados.');
+ const stores=mode==='all'?RESET_ORDER_ALL:RESET_ORDER_KEEP;
+ const deleted={};
+ for(const store of stores){
+  if(onStatus)onStatus(`Apagando ${RESET_LABELS[store]}...`);
+  invalidateCache(store);
+  deleted[store]=(await all(store)).length;
+  const {error}=await sbClient.from(store).delete().not('id','is',null);
+  if(error)throw new Error(`${RESET_LABELS[store]}: ${error.message}`);
+  invalidateCache(store);
+ }
+ // Conferência: um apagamento barrado por permissão não gera erro, então confirmamos o que sobrou.
+ if(onStatus)onStatus('Conferindo...');
+ const remaining={};
+ for(const store of stores){invalidateCache(store);const n=(await all(store)).length;if(n>0)remaining[store]=n;}
+ return {deleted,remaining};
+}
+function renderResetPanel(){
+ const box=$('resetPanel');
+ box.classList.remove('hidden');
+ box.innerHTML=`<div class="reset-panel"><h3>Zerar dados do aplicativo</h3>
+  <div class="field reset-modes"><label><input type="radio" name="resetMode" value="keep" checked> Manter cadastros (clientes e veículos) e apagar o restante</label><label><input type="radio" name="resetMode" value="all"> Apagar tudo, inclusive clientes e veículos</label></div>
+  <p id="resetCounts" class="muted small">Contando registros...</p>
+  <ol class="small"><li>Baixe o backup completo: <button type="button" class="secondary" id="resetBackupBtn">Baixar backup agora</button><br><span id="resetBackupState" class="muted small">Backup ainda não baixado.</span></li>
+   <li><label><input type="checkbox" id="resetBackupOk" disabled> Guardei o arquivo de backup em local seguro</label></li>
+   <li>Digite <b>ZERAR</b> para confirmar: <input id="resetWord" autocomplete="off" disabled style="max-width:140px"></li></ol>
+  <div class="form-actions"><button type="button" class="secondary" id="resetCancel">Cancelar</button><button type="button" class="danger-action" id="resetGo" disabled>Apagar definitivamente</button></div>
+  <p id="resetStatus" class="small"></p></div>`;
+ const mode=()=>box.querySelector('input[name=resetMode]:checked').value;
+ let counts={};
+ const refreshCounts=()=>{
+  const stores=mode()==='all'?RESET_ORDER_ALL:RESET_ORDER_KEEP;
+  const del=stores.map(s=>`${counts[s]??0} ${RESET_LABELS[s]}`).join(', ');
+  const keep=mode()==='all'?'Nada será mantido.':`Serão mantidos: ${counts.clients??0} clientes e ${counts.vehicles??0} veículos.`;
+  $('resetCounts').textContent=`Serão apagados: ${del}. ${keep}`;
+ };
+ (async()=>{try{for(const s of RESET_ORDER_ALL){invalidateCache(s);counts[s]=(await all(s)).length;}refreshCounts();}catch(e){$('resetCounts').textContent='Não foi possível contar os registros: '+e.message;}})();
+ box.querySelectorAll('input[name=resetMode]').forEach(r=>r.onchange=refreshCounts);
+ const update=()=>{$('resetWord').disabled=!$('resetBackupOk').checked;$('resetGo').disabled=!($('resetBackupOk').checked&&$('resetWord').value.trim().toUpperCase()==='ZERAR');};
+ $('resetBackupBtn').onclick=async()=>{
+  $('resetBackupBtn').disabled=true;$('resetBackupState').textContent='Gerando backup...';
+  const done=await backupJSON();
+  $('resetBackupBtn').disabled=false;
+  if(done){$('resetBackupState').textContent=`Backup baixado (Auto_Brilho_Backup_${localISODate()}.json). Confira o arquivo na pasta de downloads.`;$('resetBackupOk').disabled=false;}
+  else{$('resetBackupState').textContent='Não foi possível gerar o backup. Tente de novo; sem backup a limpeza fica bloqueada.';}
+  update();
+ };
+ $('resetBackupOk').onchange=update;$('resetWord').oninput=update;
+ $('resetCancel').onclick=()=>{box.classList.add('hidden');box.innerHTML='';};
+ $('resetGo').onclick=async()=>{
+  const m=mode();
+  if(!confirm(m==='all'?'ÚLTIMO AVISO: todos os dados (clientes, veículos, serviços, financeiro e agendamentos) serão apagados para sempre. Continuar?':'ÚLTIMO AVISO: serviços, pagamentos, despesas, contas a pagar e agendamentos serão apagados para sempre. Os clientes e veículos serão mantidos. Continuar?'))return;
+  $('resetGo').disabled=true;$('resetCancel').disabled=true;$('resetWord').disabled=true;$('resetBackupBtn').disabled=true;
+  try{
+   const r=await wipeData(m,t=>{$('resetStatus').textContent=t;});
+   const left=Object.entries(r.remaining);
+   if(left.length){
+    $('resetStatus').innerHTML=`<strong>Atenção:</strong> alguns registros não foram apagados (${esc(left.map(([s,n])=>n+' '+RESET_LABELS[s]).join(', '))}). Provavelmente uma regra de permissão do banco impediu. Os demais foram apagados.`;
+   }else{
+    $('resetStatus').innerHTML=`<strong>Base zerada.</strong> Apagados: ${esc(Object.entries(r.deleted).map(([s,n])=>n+' '+RESET_LABELS[s]).join(', '))}.${m==='keep'?' Clientes e veículos foram mantidos.':''}`;
+   }
+   showToast(left.length?'Limpeza concluída com avisos.':'Base zerada.');
+   invalidateCache();await renderStats();await renderFinancialMovement();
+  }catch(err){
+   $('resetStatus').textContent='Não foi possível concluir: '+(err.message||'verifique a conexão.')+' Parte dos dados pode ter sido apagada; confira os números e repita se necessário.';
+   showToast('Erro ao zerar os dados.');
+  }finally{$('resetCancel').disabled=false;$('resetCancel').textContent='Fechar';}
+ };
+}
+
+/* ===== v24: duplicados, mesclagem e propagação de alterações de cadastro ===== */
+let cadastroView='list';
+async function cascadeClientRename(clientId,oldName,newName){
+ const [vs,ss,ps,as]=await Promise.all([all('vehicles'),all('services'),all('payments'),all('appointments')]);
+ for(const v of vs.filter(x=>x.clientId===clientId||(!x.clientId&&sameClient(x.client,oldName))))if(v.client!==newName)await save('vehicles',{...v,client:newName,clientId:clientId});
+ for(const s of ss.filter(x=>sameClient(x.client,oldName)&&x.client!==newName))await save('services',{...s,client:newName});
+ for(const p of ps.filter(x=>sameClient(x.client,oldName)&&x.client!==newName))await save('payments',{...p,client:newName});
+ for(const a of as.filter(x=>sameClient(x.client,oldName)&&x.client!==newName))await save('appointments',{...a,client:newName});
+}
+async function cascadePlateChange(oldPlate,newPlate){
+ const o=normalizePlate(oldPlate),n=normalizePlate(newPlate);
+ if(!o||!n||o===n)return;
+ const [ss,as]=await Promise.all([all('services'),all('appointments')]);
+ for(const s of ss.filter(x=>normalizePlate(x.vehicle)===o))await save('services',{...s,vehicle:n});
+ for(const a of as.filter(x=>normalizePlate(x.vehicle)===o))await save('appointments',{...a,vehicle:n});
+}
+const filled=o=>Object.entries(o).filter(([k,v])=>!['id','createdAt','updatedAt','clientId'].includes(k)&&String(v??'').trim()!=='').length;
+const phoneKey=v=>{const d=String(v||'').replace(/\D/g,'');return d.length>=10?(d.length>11?d.slice(-11):d):'';};
+function findDuplicateGroups(clients,vehicles){
+ const groups=[];const by=(list,keyFn)=>{const m=new Map();list.forEach(x=>{const k=keyFn(x);if(!k)return;const a=m.get(k);if(a)a.push(x);else m.set(k,[x]);});return [...m].filter(([,a])=>a.length>1);};
+ by(clients,c=>normalizeText(c.name)).forEach(([k,a])=>groups.push({type:'client',kind:'name',key:k,label:`Mesmo nome: ${a[0].name}`,members:a}));
+ by(clients,c=>phoneKey(c.phone)).forEach(([k,a])=>{if(new Set(a.map(c=>normalizeText(c.name))).size>1)groups.push({type:'client',kind:'phone',key:k,label:`Mesmo telefone: ${a.map(c=>c.name).join(' / ')}`,members:a});});
+ by(vehicles,v=>{const p=normalizePlate(v.plate);return p.length>=5?p:'';}).forEach(([k,a])=>groups.push({type:'vehicle',kind:'plate',key:k,label:`Mesma placa: ${k}`,members:a}));
+ groups.forEach(g=>{g.id=g.type+'-'+g.kind+':'+g.key;});
+ return groups;
+}
+function dupIgnored(){try{return new Set(JSON.parse(localStorage.getItem('ab_dup_ignored')||'[]'));}catch(e){return new Set();}}
+function dupIgnore(id){const s=dupIgnored();s.add(id);try{localStorage.setItem('ab_dup_ignored',JSON.stringify([...s]));}catch(e){}}
+async function mergeClients(primary,others,onStatus){
+ const [vehicles,services,payments,appointments]=await Promise.all([all('vehicles'),all('services'),all('payments'),all('appointments')]);
+ const merged={...primary};
+ for(const o of others){
+  ['phone','email','document','address','notes'].forEach(f=>{if(!String(merged[f]||'').trim()&&String(o[f]||'').trim())merged[f]=o[f];});
+  if(o.registrationDate&&(!merged.registrationDate||o.registrationDate<merged.registrationDate))merged.registrationDate=o.registrationDate;
+  if(o.lastContactAt&&(!merged.lastContactAt||o.lastContactAt>merged.lastContactAt))merged.lastContactAt=o.lastContactAt;
+ }
+ await save('clients',merged);
+ const sameNameAsPrimary=o=>sameClient(o.name,primary.name);
+ let own=vehicles.filter(v=>v.clientId===primary.id||(!v.clientId&&sameClient(v.client,primary.name)));
+ for(const o of others){
+  if(onStatus)onStatus(`Mesclando “${o.name}”...`);
+  const moving=vehicles.filter(v=>v.clientId===o.id||(!v.clientId&&sameClient(v.client,o.name)&&!sameNameAsPrimary(o)));
+  for(const v of moving){
+   const twin=own.find(x=>x.id!==v.id&&normalizePlate(x.plate)&&normalizePlate(x.plate)===normalizePlate(v.plate));
+   if(twin){
+    const fill={...twin};['type','brand','model','color','notes'].forEach(f=>{if(!String(fill[f]||'').trim()&&String(v[f]||'').trim())fill[f]=v[f];});
+    await save('vehicles',fill);await remove('vehicles',v.id);
+   }else{const moved={...v,clientId:primary.id,client:primary.name};await save('vehicles',moved);own.push(moved);}
+  }
+  if(!sameNameAsPrimary(o)){
+   for(const s of services.filter(x=>sameClient(x.client,o.name)))await save('services',{...s,client:primary.name});
+   for(const p of payments.filter(x=>sameClient(x.client,o.name)))await save('payments',{...p,client:primary.name});
+   for(const a of appointments.filter(x=>sameClient(x.client,o.name)))await save('appointments',{...a,client:primary.name});
+  }
+  await remove('clients',o.id);
+ }
+}
+async function mergeVehicles(primary,others){
+ const merged={...primary};
+ for(const o of others)['type','brand','model','color','notes'].forEach(f=>{if(!String(merged[f]||'').trim()&&String(o[f]||'').trim())merged[f]=o[f];});
+ await save('vehicles',merged);
+ for(const o of others)await remove('vehicles',o.id);
+}
+async function renderDuplicatesPanel(){
+ try{
+  invalidateCache();
+  const [clients,vehicles,services]=await Promise.all([all('clients'),all('vehicles'),all('services')]);
+  const ignored=dupIgnored();
+  const all$=findDuplicateGroups(clients,vehicles),groups=all$.filter(g=>!ignored.has(g.id));
+  const svcCount=n=>services.filter(s=>sameClient(s.client,n)).length;
+  const vehCount=c=>vehicles.filter(v=>v.clientId===c.id||(!v.clientId&&sameClient(v.client,c.name))).length;
+  const plateSvc=p=>services.filter(s=>normalizePlate(s.vehicle)===normalizePlate(p)).length;
+  const score=(g,m)=>g.type==='client'?svcCount(m.name)*100+filled(m)*10:plateSvc(m.plate)*100+filled(m)*10;
+  groups.forEach(g=>g.members.sort((a,b)=>score(g,b)-score(g,a)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))));
+  const memberHtml=(g,m,i)=>g.type==='client'
+   ?`<label class="dup-member"><input type="radio" name="keep-${esc(g.id)}" value="${esc(m.id)}" ${i===0?'checked':''}><span><strong>${esc(m.name)}</strong><br><span class="muted small">${esc(m.phone||'sem telefone')}${m.document?' · '+esc(m.document):''}${m.email?' · '+esc(m.email):''}<br>${vehCount(m)} veículo(s) · ${svcCount(m.name)} serviço(s)${m.registrationDate?' · cadastro '+dateBR(m.registrationDate):''}</span></span></label>`
+   :`<label class="dup-member"><input type="radio" name="keep-${esc(g.id)}" value="${esc(m.id)}" ${i===0?'checked':''}><span><strong>${esc(normalizePlate(m.plate))}</strong> · ${esc([m.brand,m.model,m.color].filter(Boolean).join(' ')||'sem detalhes')}<br><span class="muted small">Proprietário: ${esc(m.client||'não identificado')} · ${plateSvc(m.plate)} serviço(s)</span></span></label>`;
+  const sections=[['Clientes com o mesmo nome','client','name'],['Clientes com o mesmo telefone (nomes diferentes)','client','phone'],['Veículos com a mesma placa','vehicle','plate']];
+  $('tableWrap').innerHTML=`<div class="return-actions" style="margin-bottom:10px"><button type="button" class="secondary" id="dupBack">← Voltar ao cadastro</button></div>
+   <p class="muted small">Escolha qual cadastro manter em cada grupo. Veículos, serviços e financeiro dos outros passam para ele, e os demais são excluídos. Dica: gere um backup em Relatórios antes de mesclar. Telefone igual pode ser de uma mesma família; use “Não é duplicado” nesses casos (fica salvo neste aparelho).</p>
+   ${groups.length?sections.map(([title,type,kind])=>{const gs=groups.filter(g=>g.type===type&&g.kind===kind);return gs.length?`<h4>${title} (${gs.length})</h4><div class="svc-list">${gs.map(g=>`<article class="svc-card dup-group" data-gid="${esc(g.id)}"><strong>${esc(g.label)}</strong>${g.members.map((m,i)=>memberHtml(g,m,i)).join('')}<div class="svc-actions"><button type="button" class="primary small-btn" data-dup-merge="${esc(g.id)}">Mesclar no cadastro marcado</button><button type="button" class="action" data-dup-ignore="${esc(g.id)}">Não é duplicado</button></div></article>`).join('')}</div>`:'';}).join(''):'<div class="empty">Nenhum cadastro duplicado encontrado. 🎉</div>'}
+   ${all$.length-groups.length?`<p class="muted small">${all$.length-groups.length} grupo(s) marcados como “não é duplicado”. <button type="button" class="action" id="dupRestore">Mostrar novamente</button></p>`:''}
+   <p id="dupStatus" class="small"></p>`;
+  $('dupBack').onclick=()=>{cadastroView='list';renderClientVehicleTable();};
+  const rs=$('dupRestore');if(rs)rs.onclick=()=>{try{localStorage.removeItem('ab_dup_ignored');}catch(e){}renderDuplicatesPanel();};
+  $('tableWrap').querySelectorAll('[data-dup-ignore]').forEach(b=>b.onclick=()=>{dupIgnore(b.dataset.dupIgnore);renderDuplicatesPanel();});
+  $('tableWrap').querySelectorAll('[data-dup-merge]').forEach(b=>b.onclick=async()=>{
+   const g=groups.find(x=>x.id===b.dataset.dupMerge);if(!g)return;
+   const keepId=$('tableWrap').querySelector(`input[name="keep-${CSS.escape(g.id)}"]:checked`)?.value;
+   const primary=g.members.find(m=>m.id===keepId);const others=g.members.filter(m=>m.id!==keepId);
+   if(!primary||!others.length)return;
+   const name=g.type==='client'?primary.name:normalizePlate(primary.plate);
+   if(!confirm(`Mesclar ${g.members.length} cadastros em “${name}”?\n\nOs outros ${others.length} serão excluídos e seus dados passam para o cadastro mantido. Não dá para desfazer.`))return;
+   $('tableWrap').querySelectorAll('button').forEach(x=>x.disabled=true);
+   try{
+    if(g.type==='client')await mergeClients(primary,others,t=>{$('dupStatus').textContent=t;});else await mergeVehicles(primary,others);
+    showToast('Cadastros mesclados.');
+   }catch(err){showToast('Não foi possível mesclar: '+(err.message||'verifique a conexão.'));}
+   await renderDuplicatesPanel();
+  });
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os cadastros. Verifique a conexão.</div>';console.error(err);}
 }
 
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
@@ -2573,6 +2760,7 @@ $('templateBtn').onclick=downloadImportTemplate;
 $('exportBtn').onclick=exportExcel;
 setupExcelImport();
 $('backupBtn').onclick=backupJSON;
+$('resetDataBtn').onclick=()=>{if(!isEmployee())renderResetPanel();};
 
 window.addEventListener('beforeinstallprompt',e=>{
  e.preventDefault();

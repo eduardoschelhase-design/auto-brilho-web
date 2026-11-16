@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 <title>Auto Brilho | Gestão</title>
 </head>
 <body>
@@ -65,7 +65,8 @@
    <div id="importPreview" class="import-preview hidden"></div>
    <button id="exportBtn" class="primary wide" type="button">Exportar relatórios para Excel</button>
    <button id="backupBtn" class="secondary wide backup-btn" type="button">Baixar backup completo (JSON)</button>
-   <div id="financialMovement" class="financial-movement"></div><p id="exportStatus" class="muted small"></p>
+   <div id="financialMovement" class="financial-movement"></div>
+   <div class="danger-zone"><h3>Zona de risco</h3><p class="small muted">Apaga os dados do aplicativo para recomeçar do zero. Não dá para desfazer; o backup é obrigatório antes.</p><button id="resetDataBtn" class="danger-action wide" type="button">Zerar dados…</button><div id="resetPanel" class="hidden"></div></div><p id="exportStatus" class="muted small"></p>
    <p class="small muted">Para criar o arquivo Excel, é necessária uma conexão com a internet no momento da exportação.</p>
   </section>
   <section class="notice"><span class="notice-icon">ⓘ</span><p><strong>Importante sobre seus dados</strong><br>Os registros são armazenados na nuvem e sincronizados quando você estiver conectado. Baixe backups regularmente e guarde-os em local seguro. A exportação Excel reúne cadastros, serviços e movimento financeiro.</p></section>
@@ -76,10 +77,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 <script>
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=22').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=23').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
 }
 </script>
 </body>

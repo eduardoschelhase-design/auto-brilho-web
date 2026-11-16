@@ -1,3 +1,33 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v23 (sobre a v22; inclui tudo da v22)
+
+SE ALGO DER ERRADO: volte ao ZIP da v22 (ou v21) e avise qual tela falhou.
+
+1) ZERAR DADOS (Relatórios > Zona de risco > "Zerar dados...") — somente dono
+- Duas opções: "Manter cadastros (clientes e veículos) e apagar o restante" ou "Apagar tudo".
+- Mostra quantos registros de cada tipo serão apagados e o que será mantido.
+- Proteções: backup completo obrigatório (o botão só libera depois de baixar), caixa "guardei o backup",
+  digitar ZERAR e uma confirmação final. Ao terminar, o app confere o que sobrou e avisa se alguma
+  permissão do banco impediu a exclusão (não finge sucesso).
+- Não apaga: taxas de cartão e meta (ficam na conta) nem a mensagem do WhatsApp (fica no aparelho).
+
+2) VEÍCULOS E CLIENTES
+- Editar veículo: ao trocar a placa, os serviços e agendamentos antigos passam a usar a placa nova.
+- Renomear o cliente pelo formulário do veículo agora mantém o histórico (veículos, serviços, pagamentos
+  e agendamentos acompanham o novo nome). O botão "Editar cliente" faz o mesmo.
+- Cadastro novo com nome que já existe: o app pergunta se quer usar o cadastro existente (antes só
+  comparava CPF/telefone, e por isso nascia duplicado).
+
+3) CADASTROS DUPLICADOS (Cadastro > botão "Cadastros duplicados (n)")
+- Encontra: clientes com o mesmo nome, clientes com o mesmo telefone (nomes diferentes) e veículos com a
+  mesma placa (mesmo escrita de outro jeito, como ABC-1D23 e abc1d23).
+- Você marca qual cadastro manter (já vem sugerido o mais completo) e toca em "Mesclar". Veículos, serviços,
+  pagamentos e agendamentos dos outros passam para ele; campos vazios são completados; os outros são excluídos.
+- "Não é duplicado" esconde o grupo (útil para famílias com o mesmo telefone); a escolha fica no aparelho.
+- A ferramenta não aparece para o funcionário. Recomenda-se gerar um backup antes de mesclar.
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v23). Não mexa no config.js.
+
+--- v22 ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v22 (sobre a v21)
 
 SE ALGO DER ERRADO: volte ao ZIP da v21 e avise qual tela falhou.
