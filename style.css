@@ -87,3 +87,14 @@ button{font-family:inherit}button:focus-visible{outline:2px solid #ff6570;outlin
 
 .filter-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.filter-chip{border:1px solid var(--line);background:#19191b;border-radius:999px;padding:9px 14px;font-weight:650;color:#d2d2d6;font-size:13px}.filter-chip.active{background:var(--gold);color:#fff;border-color:var(--gold)}.late-badge{display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;background:#4a1d1d;color:#ffb4b4;font-size:11px;font-weight:700}
 .finance-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}.finance-toolbar label{font-size:13px;color:#d2d2d6}.finance-toolbar input[type=month]{background:#19191b;border:1px solid var(--line);border-radius:10px;color:#f4f4f5;padding:9px 10px;font-size:14px}.amount-in{color:#8fe3a6}.amount-out{color:#ffb4b4}.dashboard-metric small{display:block;margin-top:4px;font-size:11px}
+.return-list{display:grid;gap:10px}.return-card{border:1px solid var(--line);background:#19191b;border-radius:14px;padding:14px;display:grid;gap:5px}.return-card h4{margin:0;font-size:16px}.return-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center}.wa-link{display:inline-block;text-decoration:none;background:#1f7a3d;color:#fff;border-radius:10px;padding:10px 16px;font-weight:700;font-size:14px}.wa-link.disabled{background:#333;color:#9a9aa0}.return-editor{margin:0 0 12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#19191b}.return-editor summary{cursor:pointer;font-weight:650}.return-editor textarea{width:100%;margin-top:8px;background:#111113;border:1px solid var(--line);border-radius:10px;color:#f4f4f5;padding:10px;font:inherit}
+
+.extra-row{display:grid;grid-template-columns:1fr 110px 44px;gap:8px;margin-bottom:8px}
+.goal-card{border:1px solid var(--line);background:#19191b;border-radius:14px;padding:14px;margin:0 0 14px}
+.goal-card p{margin:6px 0 0}
+.goal-bar{height:12px;background:#2a2a2d;border-radius:999px;overflow:hidden;margin:10px 0 6px}
+.goal-bar div{height:100%;background:var(--gold);border-radius:999px}
+.ready-notice{border:1px solid var(--line);background:#19191b;border-radius:14px;padding:14px;margin-bottom:14px}
+.ready-notice h3{margin:0 0 6px}
+a.wa-small{display:inline-block;text-decoration:none;background:#1f7a3d;color:#fff}
+body.role-funcionario [data-delete],body.role-funcionario [data-deleteclient],body.role-funcionario [data-fdel]{display:none!important}

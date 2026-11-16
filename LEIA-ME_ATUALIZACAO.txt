@@ -1,3 +1,59 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v21 (sobre a v19; inclui o Retorno da v20)
+
+SE ALGO DER ERRADO: volte ao ZIP da última versão que funcionava (v19) e avise qual tela falhou.
+
+1) SERVIÇO EXTRA
+- No lançamento do serviço: "Valor base" + linhas de "Serviços extras" (ex.: cera, revitalização de plásticos),
+  cada uma com descrição e valor. O total (base + extras) é o valor do serviço e alimenta o financeiro.
+- A lista de serviços mostra os extras ao lado do serviço; o Financeiro mostra "Extras vendidos" do mês.
+
+2) TAXA DE CARTÃO
+- Financeiro > "Taxas de cartão e meta do mês": taxa de Pix, cartão geral, débito e crédito.
+- Cada novo recebimento grava a taxa da época. O Financeiro mostra "Taxas de cartão" e "Resultado do mês (após taxas)".
+- "Contabilizar taxas a partir de": data inicial; recebimentos anteriores não recebem taxa retroativa.
+- As configurações ficam na sua conta (valem em todos os aparelhos).
+
+3) META DO MÊS
+- Defina a meta no mesmo painel. O Início mostra barra de progresso, quanto falta, valor necessário por dia,
+  projeção no ritmo atual e se o faturamento já cobre as despesas do mês.
+
+4) STATUS DO SERVIÇO + WHATSAPP
+- Novos status: Aguardando, Em andamento, Pronto para retirada, Concluído, Cancelado.
+- Ao salvar como "Pronto para retirada" aparece o botão "Avisar cliente no WhatsApp" (nome, veículo e placa).
+  Na lista de serviços, esses serviços ganham o botão "Avisar cliente".
+- O pagamento só é gerado quando o serviço vira Concluído, como antes.
+
+5) RETORNO DE CLIENTES (v20) — aba Retorno, igual à v20.
+
+6) LOGIN POR PERFIL
+- Dono (padrão): acesso total. Funcionário: só Cadastro, Retorno e Serviços; não exclui; não vê valores no Retorno.
+- O perfil é definido no Supabase (app_metadata.role = funcionario). Quem não tem perfil continua dono.
+- Serviços lançados pelo funcionário ficam marcados e o dono gera os pagamentos automaticamente ao abrir o app
+  (ou quando a sincronização em tempo real chega). Por isso o financeiro pode demorar até o dono abrir o app.
+- Passo a passo de criação do usuário e regras de proteção no banco: arquivo Supabase_Perfis_de_Acesso.sql
+  (opcional; rode só depois de testar o app).
+
+OUTROS
+- Tabelas de listagem mostram os 200 registros mais recentes (use a busca para os demais): mais rápido em serviços.
+- Arquivos alterados: app.js, style.css, index.html, sw.js (cache v21). Não mexa no config.js.
+
+--- v20 (Retorno) ---
+AUTO BRILHO WEB — ATUALIZAÇÃO v20 (sobre a v19)
+
+NOVA ABA: RETORNO (reativação de clientes)
+- Lista clientes que não voltam há 30, 45, 60 ou 90+ dias (conta só serviços concluídos), dos que mais
+  vieram para os que menos vieram. Mostra dias sem voltar, último serviço, visitas, total gasto e veículo.
+- Botão WhatsApp abre a conversa com mensagem pronta ({nome}, {veiculo} e {dias} são preenchidos sozinhos).
+  A mensagem pode ser editada em "Mensagem do WhatsApp" e fica salva no aparelho.
+- Ao tocar em WhatsApp o cliente é marcado como contatado por 15 dias e sai da lista; o botão "Contatados"
+  mostra quem foi contatado e permite desfazer.
+- Telefones sem DDD ou incompletos aparecem como "Sem telefone válido". Números com 10 ou 11 dígitos
+  ganham o código 55 automaticamente.
+- A busca da aba procura por nome, telefone ou placa.
+- Dado novo: o campo lastContactAt é gravado no cadastro do cliente (nenhuma alteração no Supabase é necessária).
+- Arquivos alterados: app.js, style.css, index.html e sw.js (cache v20).
+
+--- v19 (já instalada) ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v19 (sobre a v18)
 
 ABA FINANCEIRO (antiga "Pagamentos")

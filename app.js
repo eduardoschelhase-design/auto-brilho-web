@@ -6,7 +6,7 @@ const DB_NAME='AutoBrilhoDB', DB_VERSION=1;
 const modules={
  clients:{label:'Clientes',singular:'cliente',icon:'♙',store:'clients',fields:[['name','Nome completo','text',true],['phone','Telefone / WhatsApp','tel',false],['email','E-mail','email',false],['document','CPF / CNPJ','text',false],['address','Endereço','text',false],['notes','Observações','textarea',false]],columns:[['name','Nome'],['phone','Telefone'],['document','CPF / CNPJ']]},
  vehicles:{label:'Veículos',singular:'veículo',icon:'🚗',store:'vehicles',fields:[['client','Cliente','text',true],['plate','Placa','text',true],['type','Tipo de veículo','select',true,['Carro','SUV','Utilitário','Moto','Camionete','Caminhão 3/4','Caminhão','Carreta','Ônibus','Outro']],['brand','Marca','text',false],['model','Modelo','text',false],['color','Cor','text',false],['notes','Observações','textarea',false]],columns:[['plate','Placa'],['client','Cliente'],['type','Tipo'],['model','Modelo']]},
- services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Concluído','Em andamento','Cancelado']],['paymentStatus','Situação financeira','select',false,['Recebido','Pendente']],['paymentMethod','Tipo de pagamento','select',false,['Dinheiro','Pix','Cartão','Brinde']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]},
+ services:{label:'Serviços realizados',singular:'serviço',icon:'✦',store:'services',fields:[['date','Data','date',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço executado','text',true],['value','Valor (R$)','number',true],['status','Situação','select',true,['Aguardando','Em andamento','Pronto para retirada','Concluído','Cancelado']],['paymentStatus','Situação financeira','select',false,['Recebido','Pendente']],['paymentMethod','Tipo de pagamento','select',false,['Dinheiro','Pix','Cartão','Brinde']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]},
  appointments:{label:'Agendamentos',singular:'agendamento',icon:'▦',store:'appointments',fields:[['date','Data','date',true],['time','Horário','time',true],['client','Cliente','text',true],['vehicle','Veículo / placa','text',true],['service','Serviço solicitado','text',true],['value','Valor (R$)','number',false],['status','Situação','select',true,['Agendado','Confirmado','Concluído','Cancelado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]},
  payments:{label:'Receitas e pagamentos',singular:'pagamento',icon:'R$',store:'payments',fields:[['date','Data','date',true],['client','Cliente','text',true],['description','Descrição','text',true],['method','Forma de pagamento','select',true,['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Brinde','Outro']],['value','Valor (R$)','number',true],['status','Situação','select',true,['Pago','Pendente','Brinde','Estornado']],['notes','Observações','textarea',false]],columns:[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]},
  expenses:{label:'Despesas',singular:'despesa',icon:'−',store:'expenses',fields:[['date','Data do pagamento','date',false],['dueDate','Data de vencimento','date',false],['category','Categoria','select',false,['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo']],['subcategory','Subcategoria','text',false],['description','Descrição','text',true],['supplier','Fornecedor','text',false],['value','Valor (R$)','number',true],['payment','Forma de pagamento','select',false,['Pix','Dinheiro','Cartão','Transferência','Débito automático','Outro']],['paymentStatus','Situação','select',false,['Em aberto','Pago']],['notes','Observações','textarea',false]],columns:[['date','Data'],['category','Categoria'],['subcategory','Subcategoria'],['description','Descrição'],['value','Valor']]}
@@ -85,6 +85,7 @@ async function save(store,item){
 }
 
 async function remove(store,id){
+ if(isEmployee())throw new Error('Seu perfil não tem permissão para excluir.');
  const {error}=await sbClient.from(store).delete().eq('id',id);
  if(error)throw error;
  invalidateCache(store);
@@ -99,7 +100,7 @@ function renderTabs(){
   ['payables','◷','Contas a pagar']
  ];
 
- $('tabs').innerHTML=tabs.map(([key,icon,label])=>
+ $('tabs').innerHTML=tabs.filter(t=>!isEmployee()||EMPLOYEE_TABS.includes(t[0])).map(([key,icon,label])=>
   `<button class="tab ${key===active?'active':''}" data-tab="${key}">
    ${icon} ${label}
   </button>`
@@ -346,9 +347,10 @@ function renderServiceForm(item={}){
      <div class="field"><label>Veículo / placa</label><input name="vehicle" id="serviceVehicle" readonly required></div>
      <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(initialDate)}"></div>
      <div class="field"><label>Serviço executado *</label><input name="service" type="text" list="serviceOptions" required value="${esc(item.service||'')}"><datalist id="serviceOptions"><option value="Lavagem simples"><option value="Ducha"><option value="Lavagem completa"><option value="Limpeza interna"></datalist></div>
-     <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00"></div>
+     <div class="field"><label>Valor base (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.baseValue!==undefined?decimalText(item.baseValue):(item.value!==undefined?decimalText(item.value):''))}" placeholder="0,00"></div>
+     <div class="field" style="grid-column:1/-1"><label>Serviços extras (opcional)</label><div id="serviceExtras"></div><button type="button" class="secondary" id="addServiceExtra">+ Adicionar extra</button><datalist id="extraOptions"><option value="Cera"><option value="Revitalização de plásticos"><option value="Higienização interna"><option value="Polimento"><option value="Limpeza de motor"><option value="Hidratação de couro"><option value="Sujeira pesada"></datalist><div class="muted small" id="serviceTotalInfo" style="margin-top:6px"></div></div>
      <div class="field"><label>Situação *</label><select name="status" id="serviceStatus" required>
-      <option value="">Selecione...</option>${['Em andamento','Concluído','Cancelado'].map(o=>`<option ${item.status===o?'selected':''}>${o}</option>`).join('')}
+      <option value="">Selecione...</option>${['Aguardando','Em andamento','Pronto para retirada','Concluído','Cancelado'].map(o=>`<option ${item.status===o?'selected':''}>${o}</option>`).join('')}
      </select></div>
      <div id="servicePaymentFields" class="form-grid ${item.status==='Concluído'?'':'hidden'}" style="grid-column:1/-1">
       <div class="field"><label>Situação financeira *</label><select name="paymentStatus" id="servicePaymentStatus">
@@ -373,6 +375,13 @@ function renderServiceForm(item={}){
  const form=$('recordForm'), plateInput=$('servicePlate'), details=$('serviceDetails'), message=$('serviceVehicleMessage');
  let matchedVehicle=null;
  bindDecimalInput(form.elements.value);
+ const extrasBox=$('serviceExtras');
+ const readExtras=()=>[...extrasBox.querySelectorAll('.extra-row')].map(r=>({description:r.querySelector('.extra-desc').value.trim(),value:decimalValue(r.querySelector('.extra-value').value)})).filter(x=>x.description||(Number.isFinite(x.value)&&x.value>0));
+ const updateTotal=()=>{const base=decimalValue(form.elements.value.value);const baseOk=Number.isFinite(base)?base:0;const ex=readExtras().reduce((n,x)=>n+(Number.isFinite(x.value)?x.value:0),0);$('serviceTotalInfo').textContent=ex>0?`Base ${money(baseOk)} + extras ${money(ex)} = total do serviço ${money(baseOk+ex)}`:'';};
+ const addExtraRow=(desc='',val='')=>{const row=document.createElement('div');row.className='extra-row';row.innerHTML=`<input class="extra-desc" list="extraOptions" placeholder="Ex.: cera" value="${esc(desc)}"><input class="extra-value" inputmode="decimal" placeholder="0,00" value="${esc(val)}"><button type="button" class="action extra-remove" aria-label="Remover extra">✕</button>`;extrasBox.appendChild(row);bindDecimalInput(row.querySelector('.extra-value'));row.querySelector('.extra-value').addEventListener('input',updateTotal);row.querySelector('.extra-remove').onclick=()=>{row.remove();updateTotal();};};
+ (Array.isArray(item.extras)?item.extras:[]).forEach(x=>addExtraRow(x.description,decimalText(x.value)));
+ $('addServiceExtra').onclick=()=>addExtraRow();
+ form.elements.value.addEventListener('input',updateTotal);updateTotal();
  const statusInput=$('serviceStatus');
  const paymentFields=$('servicePaymentFields');
  function togglePaymentFields(){
@@ -430,9 +439,15 @@ function renderServiceForm(item={}){
   const submit=form.querySelector('[type=submit]');submit.disabled=true;
   try{
    const data=Object.fromEntries(new FormData(form).entries());
-   data.value=decimalValue(data.value);
-   if(!Number.isFinite(data.value)||data.value<0)throw new Error('Informe um valor válido.');
+   const baseValue=decimalValue(data.value);
+   if(!Number.isFinite(baseValue)||baseValue<0)throw new Error('Informe um valor base válido.');
+   const extras=readExtras().map(x=>({description:x.description,value:Number.isFinite(x.value)?x.value:0}));
+   if(extras.some(x=>!x.description||x.value<=0))throw new Error('Preencha a descrição e o valor de cada extra (ou remova a linha).');
+   const extrasTotal=Math.round(extras.reduce((n,x)=>n+x.value,0)*100)/100;
+   data.baseValue=baseValue;data.extras=extras;data.extrasTotal=extrasTotal;
+   data.value=Math.round((baseValue+extrasTotal)*100)/100; // valor total: é o que alimenta o financeiro
    data.vehicle=normalizePlate(data.vehicle);
+   if(isEmployee())data.financeSyncPending=true;
    if(data.status==='Concluído'){
     if(!data.paymentStatus||!data.paymentMethod)throw new Error('Informe se foi recebido ou pendente e o tipo de pagamento.');
     if(data.paymentStatus==='Recebido'){
@@ -441,10 +456,12 @@ function renderServiceForm(item={}){
    }else{delete data.paymentStatus;delete data.paymentMethod;delete data.receivedDate;}
    if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
    const saved=await save('services',data);
-   if(saved.status==='Concluído')await syncServicePayment(saved);
+   if(isEmployee()){/* sem acesso ao financeiro: o dono concilia depois */}
+   else if(saved.status==='Concluído')await syncServicePayment(saved);
    else await cancelLinkedServicePayment(saved.id);
-   $('formWrap').classList.add('hidden');editId=null;showToast('Serviço salvo na nuvem.');
-   await renderTable();await renderStats();await renderFinancialMovement();
+   editId=null;showToast('Serviço salvo na nuvem.');
+   if(saved.status===READY_STATUS)await showReadyNotice(saved);else $('formWrap').classList.add('hidden');
+   await renderTable();if(!isEmployee()){await renderStats();await renderFinancialMovement();}
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
   finally{submit.disabled=false;}
  };
@@ -464,6 +481,7 @@ async function syncServicePayment(service){
   serviceId:service.id,date:paymentDate,client:service.client,
   description:`Serviço ${service.service||''} - ${service.vehicle||''}`,
   method,value:Number(service.value||0),status,
+  ...feeFields(method,Number(service.value||0),status),
   notes:service.notes||''
  };
  await save('payments',payment);
@@ -847,6 +865,7 @@ async function renderTable(){
  }
  if(active==='payables'){await renderPayablesTable();return;}
  if(active==='payments'){await renderFinancePanel();return;}
+ if(active==='retorno'){await renderReturnPanel();return;}
 
  const m=modules[active];
 
@@ -867,6 +886,7 @@ async function renderTable(){
    return;
   }
 
+  const readyLinks=active==='services'?await buildReadyLinks(filtered.slice(0,200)):new Map();
   $('tableWrap').innerHTML=`
   <table>
    <thead>
@@ -874,17 +894,18 @@ async function renderTable(){
     <th>Ações</th></tr>
    </thead>
    <tbody>
-    ${filtered.map(r=>`
+    ${filtered.slice(0,200).map(r=>`
      <tr>
-      ${m.columns.map(([k])=>`<td>${esc(k==='date'?dateBR(r[k]):k==='value'?money(r[k]):r[k]??'—')}</td>`).join('')}
+      ${m.columns.map(([k])=>`<td>${esc(k==='date'?dateBR(r[k]):k==='value'?money(r[k]):k==='service'&&Array.isArray(r.extras)&&r.extras.length?`${r.service} (+ ${r.extras.map(x=>x.description).join(', ')})`:r[k]??'—')}</td>`).join('')}
       <td>
        <button class="action" data-edit="${r.id}">Editar</button>
+       ${readyLinks.get(r.id)?`<a class="action wa-small" target="_blank" rel="noopener" href="${readyLinks.get(r.id)}">Avisar cliente</a>`:''}
        <button class="action" data-delete="${r.id}">Excluir</button>
       </td>
      </tr>
     `).join('')}
    </tbody>
-  </table>`;
+  </table>${filtered.length>200?`<p class="muted small">Mostrando os 200 registros mais recentes de ${filtered.length}. Use a busca para localizar os demais.</p>`:''}`;
 
   $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>
    b.onclick=()=>renderForm(filtered.find(r=>r.id===b.dataset.edit))
@@ -1576,7 +1597,7 @@ function subscribeRealtime(){
  realtimeChannel=sbClient.channel('auto-brilho-sync').on('postgres_changes',{event:'*',schema:'public'},()=>{
   if(realtimeRefreshTimer)clearTimeout(realtimeRefreshTimer);
   realtimeRefreshTimer=setTimeout(async()=>{
-   if(realtimeRefreshBusy)return;realtimeRefreshBusy=true;invalidateCache();
+   if(realtimeRefreshBusy)return;realtimeRefreshBusy=true;invalidateCache();await reconcileEmployeeServices();invalidateCache();
    try{if(active==='home')await renderHomePanel();else if(active==='dashboard')await renderDashboards();else if(active==='reports')await renderFinancialMovement();else if(active==='pending')await renderPendingPaymentsTable();else await renderTable();await renderStats();}
    finally{realtimeRefreshBusy=false;}
   },450);
@@ -1589,10 +1610,12 @@ async function enterApp(){
  appEntering=true;
  try{
   showApp(true);
+  try{const {data:{session}}=await sbClient.auth.getSession();applySession(session&&session.user);}catch(e){console.error('Não foi possível ler o perfil do usuário:',e);}
+  if(isEmployee()){if(!EMPLOYEE_TABS.includes(active))active='services';}
+  else{await reconcileEmployeeServices();}
   renderTabs();
   renderSection();
-  await renderStats();
-  await checkPayablesNotifications();
+  if(!isEmployee()){await renderStats();await checkPayablesNotifications();}
   subscribeRealtime();
  }finally{
   appEntering=false;
@@ -1816,17 +1839,18 @@ function selectedVehicleForClient(client,vehicles){
 
 renderTabs=function(){
  const tabs=[
-  ['home','⌂','Início'],['dashboard','▥','Dashboards'],['clients','♙','Cadastro'],['services','✦','Serviços'],
+  ['home','⌂','Início'],['dashboard','▥','Dashboards'],['clients','♙','Cadastro'],['retorno','↺','Retorno'],['services','✦','Serviços'],
   ['payments','R$','Financeiro'],['pending','◷','Pendentes'],
   ['expenses','−','Despesas'],['payables','◷','Contas a pagar'],['reports','▤','Relatórios']
  ];
- $('tabs').innerHTML=tabs.map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
+ $('tabs').innerHTML=tabs.filter(t=>!isEmployee()||EMPLOYEE_TABS.includes(t[0])).map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
  $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
   active=b.dataset.tab;editId=null;editingVehicleId=null;$('formWrap').innerHTML='';$('formWrap').classList.add('hidden');$('formWrap').style.display='none';renderTabs();renderSection();
  });
 };
 
 renderSection=function(){
+ if(isEmployee()&&!EMPLOYEE_TABS.includes(active))active='services';
  // Ao entrar/trocar de seção, descarta qualquer formulário anterior.
  // Os campos de Cadastro só são recriados pelo botão + Novo cliente.
  $('formWrap').innerHTML='';
@@ -1836,19 +1860,19 @@ renderSection=function(){
  $('mainPanel').classList.toggle('hidden',reports);$('reportsPanel').classList.toggle('hidden',!reports);
  $('stats').classList.toggle('hidden',reports||(!home&&!dashboard));
  if(reports){$('sectionTitle').textContent='Relatórios e importação';$('exportStatus').textContent='';renderFinancialMovement();return;}
- const special=home||dashboard||active==='pending';
+ const special=home||dashboard||active==='pending'||active==='retorno';
  $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
- $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':modules[active]?.label||'Gestão';
+ $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='retorno'?'Retorno de clientes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':modules[active]?.label||'Gestão';
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':'Buscar neste cadastro…';
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
 async function renderHomePanel(){
  try{const [services,payments,expenses]=await Promise.all([all('services'),all('payments'),all('expenses')]);const today=localISODate();const due=expenses.filter(isDueAlert);const todayServices=services.filter(s=>s.date===today&&s.status==='Concluído');const todayReceived=payments.filter(p=>p.date===today&&p.status==='Pago').reduce((n,p)=>n+Number(p.value||0),0);
- $('tableWrap').innerHTML=`<div class="home-quick-actions"><button class="primary" data-home-action="services">+ Novo serviço</button><button class="secondary" data-home-action="pending">Pagamentos pendentes</button><button class="secondary" data-home-action="payables">Contas a pagar</button><button class="secondary" data-home-action="reports">Relatórios</button></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Serviços concluídos hoje</span><strong>${todayServices.length}</strong></div><div class="dashboard-metric"><span>Recebido hoje</span><strong>${money(todayReceived)}</strong></div><div class="dashboard-metric"><span>Contas a vencer / atrasadas</span><strong>${due.length}</strong></div></div><p class="dashboard-footnote">O painel inicial mostra apenas os principais indicadores e atalhos. Análises, metas e controles detalhados ficam na aba Dashboards.</p>`;
+ $('tableWrap').innerHTML=`<div class="home-quick-actions"><button class="primary" data-home-action="services">+ Novo serviço</button><button class="secondary" data-home-action="pending">Pagamentos pendentes</button><button class="secondary" data-home-action="payables">Contas a pagar</button><button class="secondary" data-home-action="reports">Relatórios</button></div>${goalCardHtml(services,payments,expenses)}<div class="dashboard-metrics"><div class="dashboard-metric"><span>Serviços concluídos hoje</span><strong>${todayServices.length}</strong></div><div class="dashboard-metric"><span>Recebido hoje</span><strong>${money(todayReceived)}</strong></div><div class="dashboard-metric"><span>Contas a vencer / atrasadas</span><strong>${due.length}</strong></div></div><p class="dashboard-footnote">O painel inicial mostra apenas os principais indicadores e atalhos. Análises, metas e controles detalhados ficam na aba Dashboards.</p>`;
  $('tableWrap').querySelectorAll('[data-home-action]').forEach(b=>b.onclick=()=>{active=b.dataset.homeAction;renderTabs();renderSection();if(active==='services')renderServiceForm();});
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar o resumo inicial.</div>';console.error(err);}
 }
@@ -2174,24 +2198,117 @@ async function exportExcel(){
 
 // Inicialização da aba Relatórios e lembretes de vencimento.
 
+/* ===== v21: perfis de acesso, configurações, taxas, meta, extras e aviso de pronto ===== */
+const EMPLOYEE_TABS=['clients','retorno','services'];
+const READY_STATUS='Pronto para retirada';
+const APP_DEFAULT_SETTINGS={fees:{'Pix':0,'Cartão':0,'Cartão de débito':0,'Cartão de crédito':0},goal:{monthly:0},feesSince:''};
+let appSettings=JSON.parse(JSON.stringify(APP_DEFAULT_SETTINGS));
+let currentRole='dono';
+const isEmployee=()=>currentRole==='funcionario';
+function applySession(user){
+ // Perfil vem de app_metadata.role (só pode ser alterado pelo painel do Supabase). Sem perfil = dono.
+ const role=String((user&&user.app_metadata&&user.app_metadata.role)||'').toLowerCase();
+ currentRole=role==='funcionario'?'funcionario':'dono';
+ document.body.classList.toggle('role-funcionario',currentRole==='funcionario');
+ let src=(user&&user.user_metadata&&user.user_metadata.ab_settings)||null;
+ if(!src){try{src=JSON.parse(localStorage.getItem('ab_settings')||'null');}catch(e){src=null;}}
+ src=src||{};
+ appSettings={fees:{...APP_DEFAULT_SETTINGS.fees,...(src.fees||{})},goal:{...APP_DEFAULT_SETTINGS.goal,...(src.goal||{})},feesSince:src.feesSince||''};
+}
+async function persistSettings(){
+ try{localStorage.setItem('ab_settings',JSON.stringify(appSettings));}catch(e){}
+ const {error}=await sbClient.auth.updateUser({data:{ab_settings:appSettings}});
+ if(error)throw error;
+}
+function feeRate(method){const v=Number(appSettings.fees&&appSettings.fees[method]);return Number.isFinite(v)&&v>0?v:0;}
+function feeFields(method,value,status){const pct=status==='Pago'?feeRate(method):0;return pct>0?{feePercent:pct,fee:Math.round(Number(value||0)*pct)/100}:{};}
+function feeOf(p){
+ if(p.status!=='Pago')return 0;
+ if(p.fee!==undefined&&p.fee!==null&&p.fee!=='')return Number(p.fee)||0;
+ // Sem taxa gravada: usa a taxa atual, só a partir da data em que as taxas passaram a valer.
+ if(appSettings.feesSince&&String(p.date||'')>=appSettings.feesSince)return Math.round(Number(p.value||0)*feeRate(p.method))/100;
+ return 0;
+}
+
+// Serviços lançados pelo funcionário não geram pagamento na hora (ele não acessa o financeiro):
+// o dono concilia ao abrir o app ou quando o aviso em tempo real chega.
+let reconcileBusy=false;
+async function reconcileEmployeeServices(){
+ if(isEmployee()||reconcileBusy)return 0;
+ reconcileBusy=true;
+ try{
+  const pending=(await all('services')).filter(s=>s.financeSyncPending);
+  for(const s of pending){
+   if(s.status==='Concluído')await syncServicePayment(s);else await cancelLinkedServicePayment(s.id);
+   const {financeSyncPending,...clean}=s;
+   await save('services',clean);
+  }
+  return pending.length;
+ }catch(err){console.error('Conciliação dos serviços lançados pelo funcionário:',err);return 0;}
+ finally{reconcileBusy=false;}
+}
+
+function goalCardHtml(services,payments,expenses){
+ const goal=Number(appSettings.goal&&appSettings.goal.monthly||0);
+ const today=localISODate(),key=today.slice(0,7);
+ const [Y,M,D]=today.split('-').map(Number);const daysInMonth=new Date(Y,M,0).getDate();
+ const inMonth=d=>String(d||'').slice(0,7)===key;
+ const revenue=services.filter(s=>s.status==='Concluído'&&inMonth(s.date)).reduce((n,s)=>n+Number(s.value||0),0)+payments.filter(p=>!p.serviceId&&p.status==='Pago'&&inMonth(p.date)).reduce((n,p)=>n+Number(p.value||0),0);
+ const monthExpenses=expenses.filter(e=>e.paymentStatus==='Pago'?inMonth(e.date||e.paidAt):((e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente')&&inMonth(e.dueDate))).reduce((n,e)=>n+Number(e.value||0),0);
+ const cover=monthExpenses>0?(revenue>=monthExpenses?`O faturamento já cobre as despesas do mês (${money(monthExpenses)}).`:`Faltam ${money(monthExpenses-revenue)} para cobrir as despesas do mês (${money(monthExpenses)}).`):'';
+ if(!goal)return `<div class="goal-card"><strong>Meta do mês</strong><p class="muted small">Faturado no mês: ${money(revenue)}. Defina a meta em Financeiro → “Taxas de cartão e meta do mês”.</p>${cover?`<p class="muted small">${cover}</p>`:''}</div>`;
+ const pct=Math.min(100,revenue/goal*100),left=Math.max(0,goal-revenue),daysLeft=daysInMonth-D+1;
+ const perDay=daysLeft>0?left/daysLeft:0,projection=D>0?revenue/D*daysInMonth:0;
+ return `<div class="goal-card"><strong>Meta do mês: ${money(goal)}</strong><div class="goal-bar"><div style="width:${pct.toFixed(1)}%"></div></div><p>${money(revenue)} faturados (${pct.toFixed(0)}%) · ${left>0?'faltam '+money(left):'meta batida! 🎉'}</p><p class="muted small">${left>0?`Para chegar lá: ${money(perDay)} por dia nos ${daysLeft} dia(s) restantes. `:''}Projeção no ritmo atual: ${money(projection)}.${cover?' '+cover:''}</p></div>`;
+}
+
+function readyMessage(service,car){
+ const first=String(service.client||'').trim().split(/\s+/)[0]||'cliente';
+ return `Olá, ${first}! Seu ${car||'veículo'}${service.vehicle?' ('+service.vehicle+')':''} está pronto para retirada na Auto Brilho. 🚗✨ Pode vir buscar quando quiser!`;
+}
+function readyLink(phone,service,car){return phone?`https://wa.me/${phone}?text=${encodeURIComponent(readyMessage(service,car))}`:'';}
+async function readyContext(){const [clients,vehicles]=await Promise.all([all('clients'),all('vehicles')]);return {clients,vehicles};}
+function readyLinkFor(ctx,service){
+ const c=ctx.clients.find(x=>sameClient(x.name,service.client)&&waPhone(x.phone))||ctx.clients.find(x=>sameClient(x.name,service.client));
+ const v=ctx.vehicles.find(x=>normalizePlate(x.plate)===normalizePlate(service.vehicle));
+ const car=v?([v.brand,v.model].filter(Boolean).join(' ')||'veículo'):'veículo';
+ return readyLink(waPhone(c&&c.phone),service,car);
+}
+async function buildReadyLinks(rows){
+ const map=new Map();const ready=rows.filter(r=>r.status===READY_STATUS);
+ if(!ready.length)return map;
+ try{const ctx=await readyContext();ready.forEach(r=>map.set(r.id,readyLinkFor(ctx,r)));}catch(e){console.error(e);}
+ return map;
+}
+async function showReadyNotice(service){
+ let href='';
+ try{href=readyLinkFor(await readyContext(),service);}catch(e){console.error(e);}
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
+ $('formWrap').innerHTML=`<div class="ready-notice"><h3>Serviço salvo: pronto para retirada</h3><p>${esc(service.client||'')} · ${esc(service.vehicle||'')}</p><div class="return-actions">${href?`<a class="wa-link" target="_blank" rel="noopener" href="${href}">Avisar cliente no WhatsApp</a>`:'<span class="wa-link disabled">Cliente sem telefone válido</span>'}<button type="button" class="secondary" id="closeReadyNotice">Fechar</button></div></div>`;
+ $('closeReadyNotice').onclick=()=>{$('formWrap').classList.add('hidden');$('formWrap').innerHTML='';};
+}
+
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
-let financeMonth='', financeKind='all';
+let financeMonth='', financeKind='all', financeCfgOpen=false;
 const otherIncomeMethods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'];
 async function renderFinancePanel(){
  try{
-  const [payments,expenses]=await Promise.all([all('payments'),all('expenses')]);
+  const [payments,expenses,servicesAll]=await Promise.all([all('payments'),all('expenses'),all('services')]);
   const key=financeMonth||localISODate().slice(0,7);
   const q=normalizeText($('searchInput').value);
   const inMonth=d=>String(d||'').slice(0,7)===key;
   const isPaid=e=>e.paymentStatus==='Pago';
   const isOpen=e=>e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente';
   // Entradas: recebimentos de serviços (vinculados) e outras entradas (lançadas aqui).
-  const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId,type:p.serviceId?'Serviço':'Outra entrada',status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),raw:p}));
+  const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId,type:p.serviceId?'Serviço':'Outra entrada',status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),fee:feeOf(p),raw:p}));
   // Saídas: despesas pagas no mês (pela data do pagamento) e contas em aberto que vencem no mês.
   const outs=expenses.filter(e=>isPaid(e)?inMonth(e.date||e.paidAt):(isOpen(e)&&inMonth(e.dueDate))).map(e=>({id:e.id,date:isPaid(e)?(e.date||e.paidAt):e.dueDate,dir:'out',other:false,type:'Saída',status:isPaid(e)?'Pago':'Em aberto',description:e.description||'',person:e.supplier||e.category||'',method:e.payment||'',value:Number(e.value||0)}));
   const sum=a=>a.reduce((n,x)=>n+x.value,0);
   const inPaid=ins.filter(x=>x.status==='Pago'), outPaid=outs.filter(x=>x.status==='Pago');
   const received=sum(inPaid), receivedOther=sum(inPaid.filter(x=>x.other)), receivedServices=received-receivedOther;
+  const feeTotal=inPaid.reduce((n,x)=>n+x.fee,0);
+  const extrasMonth=servicesAll.filter(x=>x.status==='Concluído'&&inMonth(x.date)&&Number(x.extrasTotal||0)>0);
+  const extrasTotalMonth=extrasMonth.reduce((n,x)=>n+Number(x.extrasTotal||0),0);
   const spent=sum(outPaid), toReceive=sum(ins.filter(x=>x.status==='Pendente')), toPay=sum(outs.filter(x=>x.status==='Em aberto'));
   let rows=[...ins,...outs];
   if(financeKind==='in')rows=rows.filter(x=>x.dir==='in');
@@ -2202,13 +2319,25 @@ async function renderFinancePanel(){
   const shown=rows.slice(0,300);
   const chip=(k,label)=>`<button type="button" class="filter-chip ${financeKind===k?'active':''}" data-fkind="${k}">${label}</button>`;
   const monthLabel=new Date(Number(key.slice(0,4)),Number(key.slice(5,7))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+const pctText=v=>String(Number(v||0)).replace('.',',');
+  const settingsHtml=`<details class="return-editor" ${financeCfgOpen?'open':''}><summary>Taxas de cartão e meta do mês</summary><div class="form-grid" style="margin-top:10px"><div class="field"><label>Taxa Pix (%)</label><input id="feePix" inputmode="decimal" value="${pctText(appSettings.fees['Pix'])}"></div><div class="field"><label>Taxa cartão geral (%)</label><input id="feeCard" inputmode="decimal" value="${pctText(appSettings.fees['Cartão'])}"></div><div class="field"><label>Taxa débito (%)</label><input id="feeDebit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de débito'])}"></div><div class="field"><label>Taxa crédito (%)</label><input id="feeCredit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de crédito'])}"></div><div class="field"><label>Contabilizar taxas a partir de</label><input id="feesSince" type="date" value="${esc(appSettings.feesSince||localISODate())}"></div><div class="field"><label>Meta de faturamento do mês (R$)</label><input id="goalMonthly" inputmode="decimal" value="${appSettings.goal.monthly?decimalText(appSettings.goal.monthly):''}" placeholder="0,00"></div></div><div class="return-actions"><button type="button" class="secondary" id="saveSettingsBtn">Salvar</button></div><p class="muted small">As taxas valem para novos recebimentos (os já registrados mantêm a taxa da época). As configurações ficam salvas na sua conta e valem em todos os aparelhos.</p></details>`;
   $('tableWrap').innerHTML=`<div class="finance-toolbar"><label for="financeMonthInput">Mês</label><input type="month" id="financeMonthInput" value="${key}"><button type="button" class="secondary" id="financeThisMonth">Mês atual</button></div>
-   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Resultado do mês</span><strong class="${received-spent<0?'amount-out':'amount-in'}">${money(received-spent)}</strong></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
+   ${settingsHtml}
+   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
    <div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>
    <p class="muted small">Movimento de ${esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
-   ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
+   ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}${r.fee>0?' · taxa '+money(r.fee):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
   $('financeMonthInput').onchange=e=>{financeMonth=e.target.value||'';renderFinancePanel();};
   $('financeThisMonth').onclick=()=>{financeMonth='';renderFinancePanel();};
+  $('saveSettingsBtn').onclick=async()=>{
+   try{
+    const pct=id=>{const n=decimalValue($(id).value);if(!Number.isFinite(n)||n<0||n>30)throw new Error('Taxas devem estar entre 0% e 30%.');return n;};
+    const goal=decimalValue($('goalMonthly').value);if(!Number.isFinite(goal)||goal<0)throw new Error('Informe uma meta válida.');
+    const since=$('feesSince').value||localISODate();
+    appSettings={fees:{'Pix':pct('feePix'),'Cartão':pct('feeCard'),'Cartão de débito':pct('feeDebit'),'Cartão de crédito':pct('feeCredit')},goal:{monthly:goal},feesSince:since};
+    await persistSettings();financeCfgOpen=true;showToast('Configurações salvas.');await renderFinancePanel();
+   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
+  };
   $('tableWrap').querySelectorAll('[data-fkind]').forEach(b=>b.onclick=()=>{financeKind=b.dataset.fkind;renderFinancePanel();});
   $('tableWrap').querySelectorAll('[data-fedit]').forEach(b=>b.onclick=()=>{const r=rows.find(x=>x.id===b.dataset.fedit);if(r)renderOtherIncomeForm(r.raw);});
   $('tableWrap').querySelectorAll('[data-fdel]').forEach(b=>b.onclick=async()=>{
@@ -2246,6 +2375,7 @@ function renderOtherIncomeForm(item={}){
    if(!Number.isFinite(value)||value<=0)throw new Error('Informe um valor maior que zero.');
    if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date||''))throw new Error('Informe uma data válida.');
    const record={...(item.id?item:{}),date:d.date,description:String(d.description||'').trim(),client:String(d.client||'').trim()||'Outras entradas',method:d.method,value,status:d.status,notes:d.notes||'',kind:'outra'};
+   delete record.fee;delete record.feePercent;Object.assign(record,feeFields(d.method,value,d.status));
    await save('payments',record);
    $('formWrap').classList.add('hidden');editId=null;
    showToast('Entrada salva.');
@@ -2253,6 +2383,58 @@ function renderOtherIncomeForm(item={}){
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
   finally{submit.disabled=false;}
  };
+}
+
+/* ===== RETORNO DE CLIENTES: reativação por WhatsApp (v20) ===== */
+let returnDays=30, returnShowContacted=false, returnEditorOpen=false;
+const RETURN_DEFAULT_MSG='Olá, {nome}! Aqui é da Auto Brilho. Faz {dias} dias que cuidamos do seu {veiculo}. Que tal agendar uma lavagem para deixá-lo brilhando de novo? 🚗✨';
+function returnMessageTemplate(){try{return localStorage.getItem('ab_retorno_msg')||RETURN_DEFAULT_MSG;}catch(e){return RETURN_DEFAULT_MSG;}}
+function waPhone(raw){let d=String(raw||'').replace(/\D/g,'');if(d.startsWith('00'))d=d.slice(2);if(d.length===10||d.length===11)d='55'+d;return d.length>=12&&d.length<=13?d:'';}
+function returnMessage(template,entry){
+ const first=String(entry.c.name||'').trim().split(/\s+/)[0]||'cliente';
+ const v=entry.vehicle;const car=v?[v.brand,v.model].filter(Boolean).join(' ')||'veículo':'veículo';
+ return template.replace(/\{nome\}/g,first).replace(/\{veiculo\}/g,car).replace(/\{dias\}/g,String(entry.gap));
+}
+async function renderReturnPanel(){
+ try{
+  const [clients,vehicles,services]=await Promise.all([all('clients'),all('vehicles'),all('services')]);
+  const today=localISODate();
+  const daysBetween=d=>Math.round((new Date(today+'T12:00:00')-new Date(d+'T12:00:00'))/86400000);
+  const isDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(String(d||''));
+  const byName=new Map();
+  services.forEach(s=>{if(s.status!=='Concluído'||!isDate(s.date))return;const k=normalizeText(s.client);if(!k||k==='nao identificado')return;const l=byName.get(k);if(l)l.push(s);else byName.set(k,[s]);});
+  const byPlate=new Map();vehicles.forEach(v=>{const p=normalizePlate(v.plate);if(p)byPlate.set(p,v);});
+  // Um cadastro por nome (prefere o que tem telefone), com a última visita concluída.
+  const unique=new Map();
+  clients.forEach(c=>{const k=normalizeText(c.name);const cur=unique.get(k);if(!cur||(!waPhone(cur.phone)&&waPhone(c.phone)))unique.set(k,c);});
+  const entries=[];
+  unique.forEach((c,k)=>{
+   const list=byName.get(k);if(!list||!list.length)return;
+   const last=list.reduce((a,b)=>a.date>=b.date?a:b);const gap=daysBetween(last.date);if(gap<0)return;
+   entries.push({c,last,gap,count:list.length,total:list.reduce((n,s)=>n+Number(s.value||0),0),vehicle:byPlate.get(normalizePlate(last.vehicle)),phone:waPhone(c.phone),contacted:isDate(c.lastContactAt)&&daysBetween(c.lastContactAt)<15});
+  });
+  const q=normalizeText($('searchInput').value), plateQ=normalizePlate($('searchInput').value);
+  const away=entries.filter(e=>e.gap>=returnDays&&(!q||normalizeText(e.c.name).includes(q)||normalizeText(e.c.phone).includes(q)||(plateQ.length>=3&&normalizePlate(e.last.vehicle).includes(plateQ))));
+  const pending=away.filter(e=>!e.contacted), contacted=away.filter(e=>e.contacted);
+  const list=(returnShowContacted?contacted:pending).sort((a,b)=>b.count-a.count||b.gap-a.gap);
+  const shown=list.slice(0,60);
+  const template=returnMessageTemplate();
+  const chip=(d,label)=>`<button type="button" class="filter-chip ${returnDays===d?'active':''}" data-rdays="${d}">${label}</button>`;
+  const noPhone=pending.filter(e=>!e.phone).length;
+  $('tableWrap').innerHTML=`<div class="filter-chips">${chip(30,'30+ dias')}${chip(45,'45+ dias')}${chip(60,'60+ dias')}${chip(90,'90+ dias')}<button type="button" class="filter-chip ${returnShowContacted?'active':''}" data-rcontacted="1">Contatados (${contacted.length})</button></div>
+   <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Para reativar (${returnDays}+ dias)</span><strong>${pending.length}</strong></div>${isEmployee()?'':`<div class="dashboard-metric"><span>Já gastaram no total</span><strong>${money(pending.reduce((n,e)=>n+e.total,0))}</strong></div>`}<div class="dashboard-metric"><span>Sem telefone válido</span><strong>${noPhone}</strong></div></div>
+   <details class="return-editor" ${returnEditorOpen?'open':''}><summary>Mensagem do WhatsApp</summary><textarea id="returnMsg" rows="4">${esc(template)}</textarea><p class="muted small">Use {nome}, {veiculo} e {dias}. A mensagem fica salva neste aparelho.</p><div class="return-actions"><button type="button" class="secondary" id="returnMsgSave">Salvar mensagem</button><button type="button" class="secondary" id="returnMsgReset">Restaurar padrão</button></div></details>
+   <p class="muted small">${returnShowContacted?'Clientes contatados nos últimos 15 dias.':'Clientes que não voltam há '+returnDays+' dias ou mais, dos que mais vieram para os que menos vieram. Ao tocar em WhatsApp o cliente é marcado como contatado por 15 dias.'}</p>
+   ${shown.length?`<div class="return-list">${shown.map(e=>`<article class="return-card"><h4>${esc(e.c.name)}</h4><div class="muted small">${e.gap} dias sem voltar · último serviço em ${dateBR(e.last.date)} (${esc(e.last.service||'serviço')})</div><div class="muted small">${e.count} visita(s)${isEmployee()?'':' · '+money(e.total)}${e.vehicle?' · '+esc([e.vehicle.brand,e.vehicle.model,e.vehicle.plate].filter(Boolean).join(' ')):(e.last.vehicle?' · '+esc(e.last.vehicle):'')}</div><div class="return-actions">${e.phone?`<a class="wa-link" data-wa="${esc(e.c.id)}" target="_blank" rel="noopener" href="https://wa.me/${e.phone}?text=${encodeURIComponent(returnMessage(template,e))}">WhatsApp</a>`:'<span class="wa-link disabled">Sem telefone válido</span>'}${e.contacted?`<button type="button" class="action" data-runcontact="${esc(e.c.id)}">Desfazer contato</button>`:''}</div></article>`).join('')}</div>${list.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${list.length}. Use a busca para refinar.</p>`:''}`:`<div class="empty">${returnShowContacted?'Nenhum cliente contatado recentemente.':'Nenhum cliente nesse período. Bom sinal!'}</div>`}`;
+  const rerender=()=>renderReturnPanel();
+  $('tableWrap').querySelectorAll('[data-rdays]').forEach(b=>b.onclick=()=>{returnDays=Number(b.dataset.rdays);rerender();});
+  const cb=$('tableWrap').querySelector('[data-rcontacted]');if(cb)cb.onclick=()=>{returnShowContacted=!returnShowContacted;rerender();};
+  $('returnMsgSave').onclick=()=>{const v=$('returnMsg').value.trim();try{localStorage.setItem('ab_retorno_msg',v||RETURN_DEFAULT_MSG);showToast('Mensagem salva neste aparelho.');}catch(e){showToast('Não foi possível salvar a mensagem neste aparelho.');}returnEditorOpen=true;rerender();};
+  $('returnMsgReset').onclick=()=>{try{localStorage.removeItem('ab_retorno_msg');}catch(e){}returnEditorOpen=true;rerender();};
+  const mark=async(id,value)=>{const e=entries.find(x=>x.c.id===id);if(!e)return;try{await save('clients',{...e.c,lastContactAt:value});}catch(err){showToast('Não foi possível registrar o contato: '+err.message);}};
+  $('tableWrap').querySelectorAll('[data-wa]').forEach(a=>a.addEventListener('click',async()=>{await mark(a.dataset.wa,today);setTimeout(rerender,800);}));
+  $('tableWrap').querySelectorAll('[data-runcontact]').forEach(b=>b.onclick=async()=>{await mark(b.dataset.runcontact,'');rerender();});
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os clientes. Verifique a conexão.</div>';console.error(err);}
 }
 
 $('addBtn').onclick=()=>{if(active==='payments'){renderOtherIncomeForm();return;}if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
