@@ -239,7 +239,6 @@ function renderExpenseForm(item={},isPayable=false){
   </div>
   <div class="form-actions"><button type="button" class="secondary" id="cancelExpenseForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':isPayable?'Salvar conta':'Salvar despesa'}</button></div>
  </form>`;
- $('formWrap').style.display='';
  $('formWrap').classList.remove('hidden');
  bindDecimalInput($('expenseForm').elements.value);
  $('cancelExpenseForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
@@ -361,6 +360,9 @@ function renderServiceForm(item={}){
        <option value="">Selecione...</option>${serviceMethodList(item).map(o=>`<option ${item.paymentMethod===o?'selected':''}>${o}</option>`).join('')}
       </select></div>
       <div id="serviceCreditInfo" class="muted small" style="grid-column:1/-1"></div>
+      <div class="field hidden" id="splitFirstWrap"><label>Valor nesta forma (R$)</label><input id="splitValue1" inputmode="decimal" placeholder="0,00"></div>
+      <div id="splitRows" style="grid-column:1/-1"></div>
+      <div id="splitControls" class="hidden" style="grid-column:1/-1"><button type="button" class="secondary" id="addSplit">+ Dividir pagamento</button> <span class="muted small" id="splitRemaining"></span></div>
       <div class="field ${item.paymentStatus==='Recebido'?'':'hidden'}" id="serviceReceivedDateWrap">
        <label>Data do recebimento *</label>
        <input name="receivedDate" id="serviceReceivedDate" type="date" value="${esc(item.receivedDate||(!item.id?localISODate():''))}">
@@ -385,7 +387,7 @@ function renderServiceForm(item={}){
  $('addServiceExtra').onclick=()=>addExtraRow();
  form.elements.value.addEventListener('input',updateTotal);updateTotal();
  // Rascunho: se o sistema fechar o app em segundo plano (ex.: conferir um Pix), o lançamento é retomado.
- const saveDraft=()=>{try{const v=Object.fromEntries(new FormData(form).entries());localStorage.setItem(DRAFT_KEY,JSON.stringify({t:Date.now(),id:item.id||null,values:v,extras:[...extrasBox.querySelectorAll('.extra-row')].map(r=>({d:r.querySelector('.extra-desc').value,v:r.querySelector('.extra-value').value}))}));}catch(e){}};
+ const saveDraft=()=>{try{const v=Object.fromEntries(new FormData(form).entries());localStorage.setItem(DRAFT_KEY,JSON.stringify({t:Date.now(),id:item.id||null,values:v,extras:[...extrasBox.querySelectorAll('.extra-row')].map(r=>({d:r.querySelector('.extra-desc').value,v:r.querySelector('.extra-value').value})),splits:rowsEls().length?{first:$('splitValue1').value,rows:rowsEls().map(r=>({m:r.querySelector('select').value,v:r.querySelector('input').value}))}:null}));}catch(e){}};
  form.addEventListener('input',saveDraft);form.addEventListener('change',saveDraft);
  $('cancelForm').addEventListener('click',clearServiceDraft);
  const statusInput=$('serviceStatus');
@@ -409,12 +411,63 @@ function renderServiceForm(item={}){
  $('servicePaymentStatus').addEventListener('change',()=>toggleReceivedDate(true));
  const updateCreditInfo=async()=>{
   const box=$('serviceCreditInfo');if(!box)return;
-  if(isEmployee()||!isCreditMethod($('servicePaymentMethod').value)){box.textContent='';return;}
+  const usedMethods=[$('servicePaymentMethod').value,...[...document.querySelectorAll('#splitRows .split-row select')].map(x=>x.value)];
+  if(isEmployee()||!usedMethods.some(isCreditMethod)){box.textContent='';return;}
   const who=($('serviceClient').value||item.client||'').trim();
   if(!who){box.textContent='Busque o veículo para ver o crédito do cliente.';return;}
   try{const sm=creditSummary(await all('payments'),who,item.id);box.textContent=`Crédito de ${who}: saldo ${money(sm.saldo)} · ${sm.lavagens} lavagem(ns).`;}catch(e){box.textContent='';}
  };
  $('servicePaymentMethod').addEventListener('change',updateCreditInfo);updateCreditInfo();
+ // ---- pagamento fracionado (ex.: parte em dinheiro e parte em Pix, ou Pix + crédito)
+ const splitRowsEl=$('splitRows');
+ const rowsEls=()=>[...splitRowsEl.querySelectorAll('.split-row')];
+ const totalNow=()=>{const b=decimalValue(form.elements.value.value);return round2c((Number.isFinite(b)?b:0)+readExtras().reduce((n,x)=>n+(Number.isFinite(x.value)?x.value:0),0));};
+ const splitLines=()=>rowsEls().length?[{method:$('servicePaymentMethod').value,value:decimalValue($('splitValue1').value)},...rowsEls().map(r=>({method:r.querySelector('select').value,value:decimalValue(r.querySelector('input').value)}))]:null;
+ const fmt2=n=>Math.max(0,round2c(n)).toFixed(2);
+ const refreshSplit=()=>{
+  const ls=splitLines();
+  $('splitFirstWrap').classList.toggle('hidden',!ls);
+  $('addSplit').textContent=ls?'+ Mais uma forma':'+ Dividir pagamento';
+  const rem=ls?round2c(totalNow()-ls.reduce((n,l)=>n+(Number.isFinite(l.value)?l.value:0),0)):0;
+  const el=$('splitRemaining');
+  el.textContent=ls?(Math.abs(rem)<0.005?`Soma confere com o total de ${money(totalNow())}.`:rem>0?`Falta distribuir ${money(rem)} (total ${money(totalNow())}).`:`Passou ${money(-rem)} do total de ${money(totalNow())}.`):'';
+  el.classList.toggle('amount-out',!!ls&&Math.abs(rem)>=0.005);
+ };
+ const balance=src=>{
+  const rows=rowsEls();if(rows.length!==1)return;
+  const v1=$('splitValue1'),v2=rows[0].querySelector('input');
+  if(src===v1)v2.value=fmt2(totalNow()-decimalValue(v1.value));else if(src===v2)v1.value=fmt2(totalNow()-decimalValue(v2.value));
+ };
+ const addSplitRow=(method='',value='')=>{
+  const row=document.createElement('div');row.className='split-row';
+  row.innerHTML=`<select aria-label="Forma de pagamento"><option value="">Forma...</option>${serviceMethodList(item).filter(m=>m!=='Brinde').map(m=>`<option ${m===method?'selected':''}>${esc(m)}</option>`).join('')}</select><input inputmode="decimal" placeholder="0,00" value="${esc(value)}"><button type="button" class="action split-remove" aria-label="Remover forma">✕</button>`;
+  splitRowsEl.appendChild(row);
+  const inp=row.querySelector('input');bindDecimalInput(inp);
+  inp.addEventListener('input',()=>{balance(inp);refreshSplit();});
+  row.querySelector('select').addEventListener('change',()=>{refreshSplit();updateCreditInfo();});
+  row.querySelector('.split-remove').onclick=()=>{row.remove();if(!rowsEls().length)$('splitValue1').value='';refreshSplit();};
+  refreshSplit();
+ };
+ bindDecimalInput($('splitValue1'));
+ $('splitValue1').addEventListener('input',()=>{balance($('splitValue1'));refreshSplit();});
+ $('addSplit').onclick=()=>{
+  if(!rowsEls().length){$('splitValue1').value=fmt2(totalNow());addSplitRow('','0.00');}
+  else addSplitRow('',fmt2(totalNow()-splitLines().reduce((n,l)=>n+(Number.isFinite(l.value)?l.value:0),0)));
+  refreshSplit();
+ };
+ const syncSplitVisibility=()=>{
+  const ok=statusInput.value==='Concluído'&&$('servicePaymentStatus').value==='Recebido'&&$('servicePaymentMethod').value!=='Brinde';
+  $('splitControls').classList.toggle('hidden',!ok);
+  if(!ok&&rowsEls().length){splitRowsEl.innerHTML='';$('splitValue1').value='';refreshSplit();}
+ };
+ statusInput.addEventListener('change',syncSplitVisibility);$('servicePaymentStatus').addEventListener('change',syncSplitVisibility);$('servicePaymentMethod').addEventListener('change',syncSplitVisibility);
+ const onTotalChange=()=>{const rows=rowsEls();if(rows.length===1){const v1=decimalValue($('splitValue1').value);rows[0].querySelector('input').value=fmt2(totalNow()-(Number.isFinite(v1)?v1:0));}refreshSplit();};
+ form.elements.value.addEventListener('input',onTotalChange);extrasBox.addEventListener('input',onTotalChange);
+ if(Array.isArray(item.paymentSplits)&&item.paymentSplits.length>1){
+  $('servicePaymentMethod').value=item.paymentSplits[0].method;$('splitValue1').value=decimalText(item.paymentSplits[0].value);
+  item.paymentSplits.slice(1).forEach(l=>addSplitRow(l.method,decimalText(l.value)));
+ }
+ syncSplitVisibility();refreshSplit();
  togglePaymentFields();
  plateInput.addEventListener('input',()=>{
   const start=plateInput.selectionStart; plateInput.value=normalizePlate(plateInput.value);
@@ -462,10 +515,23 @@ function renderServiceForm(item={}){
    data.value=Math.round((baseValue+extrasTotal)*100)/100; // valor total: é o que alimenta o financeiro
    data.vehicle=normalizePlate(data.vehicle);
    if(isEmployee())data.financeSyncPending=true;
-   if(!isEmployee()&&data.status==='Concluído'&&data.paymentStatus==='Recebido'&&isCreditMethod(data.paymentMethod)){
-    const sm=creditSummary(await all('payments'),data.client,item.id);
-    if(data.paymentMethod===CREDIT_METHODS.saldo&&sm.saldo<data.value&&!confirm(`Saldo insuficiente: ${money(sm.saldo)} disponível para um serviço de ${money(data.value)}. O saldo do cliente ficará negativo. Continuar mesmo assim?`))throw new Error('Escolha outra forma de pagamento ou registre uma recarga antes.');
-    if(data.paymentMethod===CREDIT_METHODS.lavagem&&sm.lavagens<1&&!confirm('Este cliente não tem lavagens pré-pagas disponíveis. Continuar mesmo assim?'))throw new Error('Escolha outra forma de pagamento ou registre um pacote antes.');
+   const sl=splitLines();
+   if(sl){
+    if(sl.some(l=>!l.method))throw new Error('Escolha a forma de pagamento de cada parte.');
+    if(sl.some(l=>!Number.isFinite(l.value)||l.value<=0))throw new Error('Informe um valor maior que zero em cada forma de pagamento.');
+    const diff=round2c(data.value-sl.reduce((n,l)=>n+l.value,0));
+    if(Math.abs(diff)>=0.005)throw new Error(`A soma das formas de pagamento precisa ser igual ao valor do serviço (${money(data.value)}). ${diff>0?'Faltam '+money(diff):'Passou '+money(-diff)}.`);
+    data.paymentSplits=sl.map(l=>({method:l.method,value:round2c(l.value)}));
+    data.paymentMethod=data.paymentSplits.map(l=>l.method).join(' + ');
+   }
+   const payLines=sl||[{method:data.paymentMethod,value:data.value}];
+   if(!isEmployee()&&data.status==='Concluído'&&data.paymentStatus==='Recebido'){
+    const needSaldo=round2c(payLines.filter(l=>l.method===CREDIT_METHODS.saldo).reduce((n,l)=>n+l.value,0)),needWash=payLines.filter(l=>l.method===CREDIT_METHODS.lavagem).length;
+    if(needSaldo>0||needWash>0){
+     const sm=creditSummary(await all('payments'),data.client,item.id);
+     if(needSaldo>0&&sm.saldo<needSaldo&&!confirm(`Saldo insuficiente: ${money(sm.saldo)} disponível para ${money(needSaldo)} em crédito. O saldo do cliente ficará negativo. Continuar mesmo assim?`))throw new Error('Escolha outra forma de pagamento ou registre uma recarga antes.');
+     if(needWash>0&&sm.lavagens<needWash&&!confirm('Este cliente não tem lavagens pré-pagas suficientes. Continuar mesmo assim?'))throw new Error('Escolha outra forma de pagamento ou registre um pacote antes.');
+    }
    }
    if(data.status==='Concluído'){
     if(!data.paymentStatus||!data.paymentMethod)throw new Error('Informe se foi recebido ou pendente e o tipo de pagamento.');
@@ -486,30 +552,36 @@ function renderServiceForm(item={}){
  };
 }
 
+function serviceLines(service){
+ if(Array.isArray(service.paymentSplits)&&service.paymentSplits.length>1&&service.paymentStatus==='Recebido')return service.paymentSplits.map(l=>({method:l.method||'',value:Number(l.value||0)}));
+ return [{method:service.paymentMethod||'',value:Number(service.value||0)}];
+}
 async function syncServicePayment(service){
  const payments=await all('payments');
- const existing=payments.find(p=>p.serviceId===service.id);
- const method=service.paymentMethod||'';
- const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?(isCreditMethod(method)?'Crédito':'Pago'):'Pendente';
- // A data do serviço e a data do recebimento são eventos diferentes.
- // Para recebimentos, usa a data informada no serviço; para pendências,
- // mantém a data do serviço apenas como referência na lista de pendentes.
- const paymentDate=(status==='Pago'||status==='Crédito')?(service.receivedDate||localISODate()):service.date;
- const payment={
-  ...(existing?{id:existing.id}:{}),
-  serviceId:service.id,date:paymentDate,client:service.client,
-  description:`Serviço ${service.service||''} - ${service.vehicle||''}`,
-  method,value:Number(service.value||0),status,
-  ...feeFields(method,Number(service.value||0),status),
-  notes:service.notes||''
- };
- await save('payments',payment);
+ const existing=payments.filter(p=>p.serviceId===service.id).sort((x,y)=>(x.splitIndex||0)-(y.splitIndex||0)||String(x.createdAt||'').localeCompare(String(y.createdAt||'')));
+ const lines=serviceLines(service);
+ // Uma linha de pagamento por forma usada (pagamento fracionado). Sem divisão, continua sendo um único pagamento.
+ for(let i=0;i<lines.length;i++){
+  const {method,value}=lines[i];
+  const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?(isCreditMethod(method)?'Crédito':'Pago'):'Pendente';
+  // A data do serviço e a data do recebimento são eventos diferentes.
+  const paymentDate=(status==='Pago'||status==='Crédito')?(service.receivedDate||localISODate()):service.date;
+  const payment={
+   ...(existing[i]?{id:existing[i].id}:{}),
+   serviceId:service.id,splitIndex:i,date:paymentDate,client:service.client,
+   description:`Serviço ${service.service||''} - ${service.vehicle||''}${lines.length>1?` (parte ${i+1}/${lines.length})`:''}`,
+   method,value,status,
+   ...feeFields(method,value,status),
+   notes:service.notes||''
+  };
+  await save('payments',payment);
+ }
+ for(const extra of existing.slice(lines.length))await remove('payments',extra.id);
 }
 
 async function cancelLinkedServicePayment(serviceId){
  const payments=await all('payments');
- const linked=payments.find(p=>p.serviceId===serviceId);
- if(linked){linked.status='Estornado';await save('payments',linked);}
+ for(const linked of payments.filter(p=>p.serviceId===serviceId&&p.status!=='Estornado')){linked.status='Estornado';await save('payments',linked);}
 }
 
 async function renderAppointmentForm(item={}){
@@ -894,6 +966,7 @@ async function renderTable(){
  if(active==='retorno'){await renderReturnPanel();return;}
  if(active==='services'){await renderServicesPanel();return;}
  if(active==='credits'){await renderCreditsPanel();return;}
+ if(active==='expenses'){await renderExpensesPanel();return;}
 
  const m=modules[active];
 
@@ -2107,8 +2180,7 @@ function excelDate(v){
  return '';
 }
 const IMPORT_MAX_ROWS_PER_SHEET=10000, IMPORT_MAX_ROWS_TOTAL=25000;
-const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data pagamento','Data de vencimento','Vencimento'];
-const importCell=(row,...names)=>{for(const name of names){const value=row?.[name];if(value!==undefined&&value!==null&&String(value).trim()!=='')return value;}return '';};
+const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data de vencimento'];
 function rowObjects(ws){
  const shown=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
  let raw=[];try{raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});}catch(e){}
@@ -2150,7 +2222,7 @@ warnDates('Serviços realizados',services.filter(s=>!s.date).map(s=>s._row));
  warnDates('Receitas e pagamentos',paymentRows.filter(r=>!excelDate(r['Data'])).map(importRowNumber));
  const payments=paymentRows.filter(r=>excelDate(r['Data'])).map(r=>({date:excelDate(r['Data']),client:String(r['Cliente']||'').trim()||'Não identificado',description:String(r['Descrição']).trim(),method:String(r['Forma de pagamento']||'Outro').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Pago').trim(),notes:String(r['Observações']||'').trim()}));
  const expenseRows=get('Despesas');
- const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&Math.abs(decimalValue(importCell(d,'Valor (R$)','Valor'))-decimalValue(importCell(p,'Valor (R$)','Valor')))<0.01&&String(importCell(d,'Data de vencimento','Vencimento','Data de pagamento','Data pagamento')||'')===String(importCell(p,'Data de vencimento','Vencimento','Data de pagamento','Data pagamento')||'')));
+ const payableRows=get('Contas a pagar').filter(p=>!expenseRows.some(d=>normalizeText(d['Descrição'])===normalizeText(p['Descrição'])&&normalizeText(d['Categoria'])===normalizeText(p['Categoria'])&&Math.abs(decimalValue(d['Valor (R$)'])-decimalValue(p['Valor (R$)']))<0.01&&String(d['Data de vencimento']||d['Data do pagamento']||'')===String(p['Data de vencimento']||p['Data do pagamento']||'')));
  const badExpenseDates=[];
  const expenses=[...expenseRows,...payableRows].map((r,i)=>({r,i})).filter(x=>String(x.r['Descrição']||'').trim()).map(({r,i})=>{
   const rawCat=String(r['Categoria']||'Diversos').trim();
@@ -2158,11 +2230,7 @@ warnDates('Serviços realizados',services.filter(s=>!s.date).map(s=>s._row));
   const status=normalizeText(r['Situação']);
   const due=excelDate(r['Data de vencimento']);
   const rowNo=importRowNumber(r);
-  const rawValue=importCell(r,'Valor (R$)','Valor');
-  const rawPaidDate=importCell(r,'Data do pagamento','Data pagamento','Data');
-  const rawDueDate=importCell(r,'Data de vencimento','Vencimento');
-  const rawPayment=importCell(r,'Forma de pagamento','Forma');
-  const expenseObj={importKey:'excel-expense-'+i,date:excelDate(rawPaidDate),dueDate:excelDate(rawDueDate)==='3000-01-01'?'':excelDate(rawDueDate),category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(rawValue),_valueProvided:String(rawValue??'').trim()!=='',payment:String(rawPayment||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
+  const expenseObj={importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:due==='3000-01-01'?'':due,category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
   if(expenseObj.paymentStatus==='Pago'&&!expenseObj.date){badExpenseDates.push(rowNo);return null;}
   return expenseObj;
  }).filter(Boolean);
@@ -2205,9 +2273,9 @@ async function importStagedExcel(){
    const payment={serviceId:service.id,date:service.date,client:service.client||'Não identificado',description:`Serviço ${service.service||''} - ${service.vehicle||''}`,method:method||'Outro',value:Number(service.value||0),status:method==='Brinde'?'Brinde':'Pago',notes:service.notes||''};
    const saved=await save('payments',payment);currentPayments.push(saved);counts.payments++;
   }
-  prog=0;for(const e of data.expenses){progress('despesas',++prog,data.expenses.length);if(!e._valueProvided||!Number.isFinite(e.value)||e.value<0){counts.duplicates++;continue;}const naturalMatch=x=>x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category)&&normalizeText(x.supplier||'')===normalizeText(e.supplier||'');let exists=currentExpenses.find(x=>x.importKey===e.importKey)||currentExpenses.find(x=>naturalMatch(x)&&Number(x.value||0)===0&&e.value>0)||currentExpenses.find(x=>!x.importKey&&naturalMatch(x)&&Math.abs(Number(x.value||0)-e.value)<0.01);if(exists){const normalizedCategory=canonicalExpenseCategory(exists.category);const cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate;const patch={...exists,category:normalizedCategory,dueDate:cleanDue};let changed=normalizedCategory!==exists.category||cleanDue!==exists.dueDate;if(Number(exists.value||0)===0&&e.value>0){patch.value=e.value;changed=true;}if(changed){const updated=await save('expenses',patch);currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);counts.expensesUpdated=(counts.expensesUpdated||0)+1;}else counts.duplicates++;continue;}const {_valueProvided,_row,...expenseData}=e;const saved=await save('expenses',{...expenseData,category:canonicalExpenseCategory(e.category)});currentExpenses.push(saved);counts.expenses++;}
+  prog=0;for(const e of data.expenses){progress('despesas',++prog,data.expenses.length);if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.find(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&(canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category))));if(exists){const normalizedCategory=canonicalExpenseCategory(exists.category);const cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate; if(normalizedCategory!==exists.category||cleanDue!==exists.dueDate){const updated=await save('expenses',{...exists,category:normalizedCategory,dueDate:cleanDue});currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}const saved=await save('expenses',{...e,category:canonicalExpenseCategory(e.category)});currentExpenses.push(saved);counts.expenses++;}
   for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
-  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas novas; ${counts.expensesUpdated||0} despesas existentes tiveram o valor corrigido. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
+  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
 
@@ -2299,7 +2367,7 @@ async function reconcileEmployeeServices(){
 }
 
 function goalCardHtml(services,payments,expenses){
- const goal=Number(appSettings.goal&&appSettings.goal.monthly||0);
+ const goal=Number(appSettings.goal&&appSettings.goal.monthly||0)||localDailyGoal();
  const today=localISODate(),key=today.slice(0,7);
  const [Y,M,D]=today.split('-').map(Number);const daysInMonth=new Date(Y,M,0).getDate();
  const inMonth=d=>String(d||'').slice(0,7)===key;
@@ -2392,7 +2460,7 @@ async function renderServicesPanel(){
    ${shown.length?`<div class="svc-list">${shown.map(s=>{
     const st=stOf(s),ex=Array.isArray(s.extras)&&s.extras.length?` <span class="muted">(+ ${esc(s.extras.map(x=>x.description).join(', '))})</span>`:'';
     const next=st===READY_STATUS?'Concluir e receber':SVC_NEXT[st]?SVC_NEXT_LABEL[st]:'';
-    const pay=st==='Concluído'?[s.paymentStatus,s.paymentMethod].filter(Boolean).join(' · '):'';
+    const pay=st==='Concluído'?[s.paymentStatus,(Array.isArray(s.paymentSplits)&&s.paymentSplits.length>1?s.paymentSplits.map(x=>x.method+' '+money(x.value)).join(' + '):s.paymentMethod)].filter(Boolean).join(' · '):'';
     return `<article class="svc-card"><div class="svc-head"><strong>${esc(normalizePlate(s.vehicle)||s.vehicle||'Sem placa')}</strong><span class="status-badge st-${normalizeText(st).replace(/[^a-z]+/g,'-')}">${esc(st)}</span></div><div>${esc(s.client||'Cliente não informado')} · ${esc(s.service||'Serviço')}${ex}</div><div class="muted small">${multiDay?dateBR(s.date)+' · ':''}${money(s.value)}${pay?' · '+esc(pay):''}</div><div class="svc-actions">${next?`<button type="button" class="primary small-btn" data-svc-next="${esc(s.id)}">${next}</button>`:''}${links.get(s.id)?`<a class="action wa-small" ${waAnchor(links.get(s.id))}>Avisar cliente</a>`:''}<button type="button" class="action" data-svc-edit="${esc(s.id)}">Editar</button><button type="button" class="action" data-delete="${esc(s.id)}">Excluir</button></div></article>`;}).join('')}</div>${list.length>shown.length?`<p class="muted small">Mostrando 100 de ${list.length}. Use a busca ou o filtro de data para refinar.</p>`:''}`:`<div class="empty">${searching?'Nenhum serviço encontrado para esta busca.':'Nenhum serviço neste período. Toque em “+ Novo serviço” para lançar.'}</div>`}`;
   const again=()=>renderServicesPanel();
   $('tableWrap').querySelectorAll('[data-srange]').forEach(b=>b.onclick=()=>{svcRange=b.dataset.srange;svcDay='';$('searchInput').value='';again();});
@@ -2634,7 +2702,7 @@ let appActive=false, hiddenAt=0, restoringState=false, uiRestoreDone=false;
 const KNOWN_TABS=['home','dashboard','clients','retorno','services','payments','credits','pending','expenses','payables','reports'];
 function saveUiState(){
  if(!appActive)return;
- try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({t:Date.now(),active,search:$('searchInput').value,scrollY:window.scrollY||document.documentElement.scrollTop||0,svcRange,svcDay,svcStatus,financeMonth,financeKind,returnDays,returnShowContacted,cadastroView,creditsFilter}));}catch(e){}
+ try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({t:Date.now(),active,search:$('searchInput').value,scrollY:window.scrollY||document.documentElement.scrollTop||0,svcRange,svcDay,svcStatus,financeMonth,financeKind,returnDays,returnShowContacted,cadastroView,creditsFilter,dashRange,expMonth}));}catch(e){}
 }
 function clearServiceDraft(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
 function readJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
@@ -2647,7 +2715,7 @@ function restoreUiStateOnce(){
  if(st&&KNOWN_TABS.includes(st.active)&&(!isEmployee()||EMPLOYEE_TABS.includes(st.active))&&(st.active!=='credits'||!isEmployee())){
   active=st.active;svcRange=st.svcRange||svcRange;svcDay=st.svcDay||'';svcStatus=st.svcStatus||'all';
   financeMonth=st.financeMonth||'';financeKind=st.financeKind||'all';returnDays=st.returnDays||30;returnShowContacted=!!st.returnShowContacted;
-  cadastroView=st.cadastroView||'list';creditsFilter=st.creditsFilter||'with';
+  cadastroView=st.cadastroView||'list';creditsFilter=st.creditsFilter||'with';dashRange=st.dashRange||'month';expMonth=st.expMonth||'';
  }
  if(draft)active='services';
  return {st,draft};
@@ -2675,6 +2743,13 @@ async function restoreServiceDraft(draft){
   const box=$('serviceExtras');while(box.firstChild)box.firstChild.remove();
   (draft.extras||[]).forEach(x=>{$('addServiceExtra').click();const row=box.lastElementChild;row.querySelector('.extra-desc').value=x.d||'';row.querySelector('.extra-value').value=x.v||'';});
   form.elements.value.dispatchEvent(new Event('input',{bubbles:true}));
+  if(draft.splits&&draft.splits.rows&&draft.splits.rows.length&&$('addSplit')){
+   $('addSplit').click();
+   for(let i=1;i<draft.splits.rows.length;i++)$('addSplit').click();
+   draft.splits.rows.forEach((x,i)=>{const r=document.querySelectorAll('#splitRows .split-row')[i];if(!r)return;r.querySelector('select').value=x.m||'';const inp=r.querySelector('input');inp.value=x.v||'';inp.dispatchEvent(new Event('input',{bubbles:true}));});
+   $('splitValue1').value=draft.splits.first||'';$('splitValue1').dispatchEvent(new Event('input',{bubbles:true}));
+   draft.splits.rows.forEach((x,i)=>{const r=document.querySelectorAll('#splitRows .split-row')[i];if(r&&draft.splits.rows.length>1)r.querySelector('input').value=x.v||'';});
+  }
   showToast('Retomamos o serviço que você estava lançando.');
  }catch(e){console.error('Não foi possível retomar o rascunho:',e);}
 }
@@ -2714,7 +2789,7 @@ function creditSummary(payments,clientName,excludeServiceId){
  });
  return {saldo:round2c(saldo),lavagens,moves};
 }
-const serviceMethodList=item=>{const base=['Dinheiro','Pix','Cartão','Brinde'];const l=isEmployee()?base:[...base,CREDIT_METHODS.saldo,CREDIT_METHODS.lavagem];if(item&&item.paymentMethod&&!l.includes(item.paymentMethod))l.push(item.paymentMethod);return l;};
+const serviceMethodList=item=>{const base=['Dinheiro','Pix','Cartão','Brinde'];const l=isEmployee()?base:[...base,CREDIT_METHODS.saldo,CREDIT_METHODS.lavagem];const splitItem=item&&Array.isArray(item.paymentSplits)&&item.paymentSplits.length>1;if(item&&item.paymentMethod&&!splitItem&&!l.includes(item.paymentMethod))l.push(item.paymentMethod);if(splitItem)item.paymentSplits.forEach(x=>{if(x.method&&!l.includes(x.method))l.push(x.method);});return l;};
 let creditsFilter='with', creditsOpen=new Set();
 async function renderCreditsPanel(){
  try{
@@ -2802,6 +2877,262 @@ async function renderCreditForm(prefill='',item={}){
   finally{btn.disabled=false;}
  };
 }
+
+/* ===== v25: dashboards novos, despesas por categoria e exportação do movimento ===== */
+const shortMoney=n=>{const v=Math.abs(n);const s=v>=1e6?(v/1e6).toFixed(1).replace('.',',')+' mi':v>=1000?(v/1000).toFixed(v>=10000?0:1).replace('.',',')+' mil':String(Math.round(v));return (n<0?'−':'')+'R$ '+s;};
+const pctText=n=>(Math.round(n*10)/10).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
+const CHART_COLORS=['#e5202b','#3b9eff','#2fbf71','#f5b942','#a06bff','#ff7ab6','#6b7280'];
+const isoDay=(y,m,d)=>y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+function shiftISOMonths(iso,n){const [y,m,d]=iso.split('-').map(Number);const t=new Date(y,m-1+n,1);const last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();return isoDay(t.getFullYear(),t.getMonth()+1,Math.min(d,last));}
+function localDailyGoal(){
+ try{const st=getLocalSettings();const daily=Number(st.dailyTarget||0);if(!daily)return 0;const [Y,M]=localISODate().split('-').map(Number);const hol=(st.holidays||'').split(',').map(x=>x.trim()).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));return daily*monthWorkingDays(Y,M,hol);}catch(e){return 0;}
+}
+let dashRange='month';
+function dashPeriod(range){
+ const today=localISODate();const [Y,M]=today.split('-').map(Number);
+ const first=(y,m)=>isoDay(y,m,1),last=(y,m)=>isoDay(y,m,new Date(y,m,0).getDate());
+ let from,to,n,label;
+ if(range==='prev'){const d=new Date(Y,M-2,1);from=first(d.getFullYear(),d.getMonth()+1);to=last(d.getFullYear(),d.getMonth()+1);n=1;label=d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});}
+ else if(range==='3m'){const d=new Date(Y,M-3,1);from=first(d.getFullYear(),d.getMonth()+1);to=today;n=3;label='Últimos 3 meses';}
+ else if(range==='12m'){const d=new Date(Y,M-12,1);from=first(d.getFullYear(),d.getMonth()+1);to=today;n=12;label='Últimos 12 meses';}
+ else{from=first(Y,M);to=today;n=1;label='Este mês (até hoje)';}
+ return {from,to,prevFrom:shiftISOMonths(from,-n),prevTo:shiftISOMonths(to,-n),label,daily:range==='month'||range==='prev'};
+}
+function dashDelta(cur,prev,inverse){
+ if(!prev&&!cur)return '';
+ if(!prev)return '<span class="delta flat">novo no período</span>';
+ const p=(cur-prev)/Math.abs(prev)*100;if(Math.abs(p)<0.05)return '<span class="delta flat">= igual ao anterior</span>';
+ const up=p>0,good=inverse?!up:up;
+ return `<span class="delta ${good?'good':'bad'}">${up?'▲':'▼'} ${pctText(Math.abs(p))} vs. anterior</span>`;
+}
+const kpi=(label,value,deltaHtml,sub,cls='')=>`<div class="kpi ${cls}"><span class="kpi-label">${esc(label)}</span><strong>${value}</strong>${deltaHtml||''}${sub?`<small class="muted">${sub}</small>`:''}</div>`;
+function hbars(items,opts={}){
+ const max=Math.max(...items.map(i=>i.value),1);
+ return `<div class="hbars">${items.map((i,idx)=>`<div class="hbar"><div class="hbar-top"><span>${esc(i.label)}</span><b>${i.text||money(i.value)}</b></div><div class="hbar-track"><i style="width:${Math.max(2,i.value/max*100).toFixed(1)}%;background:${i.color||CHART_COLORS[idx%CHART_COLORS.length]}"></i></div>${i.sub?`<small class="muted">${i.sub}</small>`:''}</div>`).join('')}</div>`;
+}
+function vbars(items,opts={}){
+ const max=Math.max(...items.map(i=>Math.max(i.value,i.value2||0)),1);
+ return `<div class="vbars-wrap"><div class="vbars-max">${shortMoney(max)}</div><div class="vbars ${opts.dense?'dense':''}" style="--cols:${items.length}">${items.map(i=>`<div class="vbar ${i.hl?'hl':''}" title="${esc(i.title||i.label)}"><div class="vbar-col">${i.value2!==undefined?`<i class="b2" style="height:${(i.value2/max*100).toFixed(1)}%"></i>`:''}<i class="b1" style="height:${(i.value/max*100).toFixed(1)}%"></i></div><span>${esc(i.label)}</span></div>`).join('')}</div></div>`;
+}
+function donut(parts,centerText){
+ const total=parts.reduce((n,p)=>n+p.value,0)||1;let acc=0;
+ const segs=parts.map(p=>{const pct=p.value/total*100;const seg=`<circle r="15.9155" cx="21" cy="21" fill="none" stroke="${p.color}" stroke-width="6" stroke-dasharray="${pct.toFixed(2)} ${(100-pct).toFixed(2)}" stroke-dashoffset="${(25-acc).toFixed(2)}"></circle>`;acc+=pct;return seg;}).join('');
+ return `<div class="donut-box"><svg viewBox="0 0 42 42" class="donut" role="img" aria-label="Formas de pagamento"><circle r="15.9155" cx="21" cy="21" fill="none" stroke="#2a2a2d" stroke-width="6"></circle>${segs}<text x="21" y="20" text-anchor="middle" class="donut-n">${esc(centerText[0])}</text><text x="21" y="26" text-anchor="middle" class="donut-s">${esc(centerText[1])}</text></svg><div class="legend">${parts.map(p=>`<div><i style="background:${p.color}"></i><span>${esc(p.label)}</span><b>${money(p.value)}</b><small>${pctText(p.value/total*100)}</small></div>`).join('')}</div></div>`;
+}
+function areaChart(points,goal){
+ const W=300,H=90;const max=Math.max(...points.map(p=>p.v),goal||0,1);
+ const x=i=>points.length>1?i/(points.length-1)*W:0,y=v=>H-v/max*H;
+ const line=points.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+ return `<svg viewBox="0 0 ${W} ${H+4}" class="area" preserveAspectRatio="none" role="img" aria-label="Faturamento acumulado"><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e5202b" stop-opacity=".45"/><stop offset="100%" stop-color="#e5202b" stop-opacity="0"/></linearGradient></defs>${goal?`<line x1="0" x2="${W}" y1="${y(goal).toFixed(1)}" y2="${y(goal).toFixed(1)}" stroke="#f5b942" stroke-width="1" stroke-dasharray="4 3"/>`:''}<path d="${line} L${W},${H} L0,${H} Z" fill="url(#ag)"/><path d="${line}" fill="none" stroke="#e5202b" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+async function renderDashboardsV25(){
+ const target=$('tableWrap');
+ target.innerHTML='<div class="dashboard-loading">Carregando indicadores da nuvem...</div>';
+ try{
+  const [services,payments,allExpenses]=await Promise.all([all('services'),all('payments'),all('expenses')]);
+  const P=dashPeriod(dashRange);
+  const inR=(d,a,b)=>{d=String(d||'').slice(0,10);return !!d&&d>=a&&d<=b;};
+  const isPaidExp=e=>e.paymentStatus!=='Em aberto'&&e.paymentStatus!=='Pendente';
+  const expDate=e=>e.date||e.paidAt||'';
+  const sum=(a,f)=>a.reduce((n,x)=>n+Number(f(x)||0),0);
+  const calc=(a,b)=>{
+   const svc=services.filter(s=>s.status==='Concluído'&&inR(s.date,a,b));
+   const otherIn=payments.filter(p=>!p.serviceId&&p.kind!=='credito'&&p.status==='Pago'&&inR(p.date,a,b));
+   const paid=payments.filter(p=>p.status==='Pago'&&inR(p.date,a,b));
+   const exps=allExpenses.filter(e=>isPaidExp(e)&&inR(expDate(e),a,b));
+   const svcRev=sum(svc,s=>s.value);
+   const received=sum(paid,p=>p.value),fees=sum(paid,p=>feeOf(p)),spent=sum(exps,e=>e.value);
+   return {svc,exps,otherIn,count:svc.length,svcRev,revenue:svcRev+sum(otherIn,p=>p.value),received,fees,spent,pending:sum(payments.filter(p=>p.status==='Pendente'&&inR(p.date,a,b)),p=>p.value),result:received-fees-spent,ticket:svc.length?svcRev/svc.length:0,extras:sum(svc,s=>s.extrasTotal),extrasCount:svc.filter(s=>Number(s.extrasTotal)>0).length};
+  };
+  const cur=calc(P.from,P.to),prev=calc(P.prevFrom,P.prevTo);
+  const chip=(k,l)=>`<button type="button" class="filter-chip ${dashRange===k?'active':''}" data-drange="${k}">${l}</button>`;
+  // ---- evolução
+  let evolution='',evoTitle='',evoNote='';
+  const dayRevenue=new Map();
+  cur.svc.forEach(s=>dayRevenue.set(s.date,(dayRevenue.get(s.date)||0)+Number(s.value||0)));
+  cur.otherIn.forEach(p=>dayRevenue.set(p.date,(dayRevenue.get(p.date)||0)+Number(p.value||0)));
+  if(P.daily){
+   const days=[];for(let d=P.from;d<=P.to;d=addDaysISO(d,1))days.push(d);
+   const vals=days.map(d=>dayRevenue.get(d)||0);const best=Math.max(...vals,0);const bestDay=days[vals.indexOf(best)];
+   evoTitle='Faturamento por dia';
+   evolution=vbars(days.map((d,i)=>({label:(i%5===0||i===days.length-1)?String(Number(d.slice(8))):'',value:vals[i],hl:vals[i]===best&&best>0,title:`${dateBR(d)}: ${money(vals[i])}`})),{dense:true});
+   evoNote=best>0?`Melhor dia: <b>${dateBR(bestDay)}</b> com ${money(best)} · média por dia com movimento: ${money(sum(vals.filter(v=>v>0),v=>v)/Math.max(1,vals.filter(v=>v>0).length))}`:'Sem faturamento no período.';
+  }else{
+   const keys=[];{let [y,m]=P.from.split('-').map(Number);const [ey,em]=P.to.split('-').map(Number);while(y<ey||(y===ey&&m<=em)){keys.push(y+'-'+String(m).padStart(2,'0'));m++;if(m>12){m=1;y++;}}}
+   const monthData=keys.map(k=>{const a=k+'-01',b=k+'-31';const c=calc(a,b);return {k,revenue:c.revenue,spent:c.spent,result:c.received-c.fees-c.spent};});
+   evoTitle='Faturamento × despesas por mês';
+   evolution=vbars(monthData.map(m=>({label:new Date(Number(m.k.slice(0,4)),Number(m.k.slice(5))-1,1).toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),value:m.revenue,value2:m.spent,title:`${m.k}: faturamento ${money(m.revenue)} · despesas ${money(m.spent)}`})));
+   const bm=monthData.slice().sort((a,b)=>b.revenue-a.revenue)[0];
+   evoNote=`<span class="lg r"></span>Faturamento <span class="lg s"></span>Despesas${bm&&bm.revenue>0?` · melhor mês: <b>${new Date(Number(bm.k.slice(0,4)),Number(bm.k.slice(5))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</b> (${money(bm.revenue)})`:''}`;
+  }
+  // ---- acumulado e meta (meses)
+  let accumulated='';
+  if(P.daily){
+   const days=[];{const [y,m]=P.from.split('-').map(Number);const lastDay=P.to===localISODate()?Number(P.to.slice(8)):new Date(y,m,0).getDate();for(let d=1;d<=lastDay;d++)days.push(isoDay(y,m,d));}
+   let run=0;const pts=days.map(d=>{run+=dayRevenue.get(d)||0;return {d,v:run};});
+   const goal=dashRange==='month'?(Number(appSettings.goal&&appSettings.goal.monthly||0)||localDailyGoal()):0;
+   accumulated=`<div class="dash-card"><h3>Faturamento acumulado</h3><div class="area-wrap">${areaChart(pts,goal)}</div><div class="area-axis"><span>dia 1</span><span>dia ${days.length}</span></div><p class="muted small">Total até agora: <b>${money(run)}</b>${goal?` · linha tracejada: meta de ${money(goal)}`:''}</p></div>`;
+  }
+  // ---- dias da semana
+  const wd=[0,1,2,3,4,5,6].map(i=>({i,v:0,n:0}));
+  cur.svc.forEach(s=>{const d=new Date(s.date+'T12:00:00').getDay();wd[d].v+=Number(s.value||0);wd[d].n++;});
+  const wdNames=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],wdFull=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+  const bestWd=wd.slice().sort((a,b)=>b.v-a.v)[0];
+  const weekdayChart=cur.count?vbars(wd.map(w=>({label:wdNames[w.i],value:w.v,hl:w===bestWd&&w.v>0,title:`${wdFull[w.i]}: ${money(w.v)} em ${w.n} serviço(s)`}))):'<p class="muted small">Sem serviços concluídos no período.</p>';
+  // ---- formas de pagamento dos serviços
+  const methodOf=p=>isCreditMethod(p.method)?'Crédito do cliente':(/cart/i.test(p.method||'')?'Cartão':(p.method||'Outro'));
+  const mix=new Map();
+  payments.filter(p=>p.serviceId&&(p.status==='Pago'||p.status==='Crédito')&&inR(p.date,P.from,P.to)).forEach(p=>{const m=methodOf(p);mix.set(m,(mix.get(m)||0)+Number(p.value||0));});
+  const mixParts=[...mix.entries()].sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:CHART_COLORS[i%CHART_COLORS.length]}));
+  const mixTotal=mixParts.reduce((n,p)=>n+p.value,0);
+  // ---- despesas por categoria
+  const catMap=new Map();cur.exps.forEach(e=>{const c=canonicalExpenseCategory(e.category);catMap.set(c,(catMap.get(c)||0)+Number(e.value||0));});
+  const caps=(getLocalSettings().caps)||{};
+  const catItems=[...catMap.entries()].sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>{const pct=cur.revenue?value/cur.revenue*100:null;const cap=Number(caps[label]||0);return {label,value,color:CHART_COLORS[i%CHART_COLORS.length],text:`${money(value)} · ${cur.spent?pctText(value/cur.spent*100):'—'}`,sub:cap&&pct!==null&&pct>cap?`⚠ ${pctText(pct)} do faturamento, acima do teto de ${cap}%`:''};});
+  const staff={};cur.exps.filter(e=>canonicalExpenseCategory(e.category)==='Funcionários').forEach(e=>{const k=staffExpenseName(e)||'Não identificado';staff[k]=(staff[k]||0)+Number(e.value||0);});
+  // ---- top serviços e clientes
+  const svcMap=new Map();cur.svc.forEach(s=>{const k=normalizeText(s.service||'serviço');const o=svcMap.get(k)||{label:s.service||'Serviço',v:0,n:0};o.v+=Number(s.value||0);o.n++;svcMap.set(k,o);});
+  const topSvc=[...svcMap.values()].sort((a,b)=>b.v-a.v).slice(0,6).map(o=>({label:o.label,value:o.v,text:money(o.v),sub:`${o.n} serviço(s) · ticket ${money(o.v/o.n)}`}));
+  const cliMap=new Map();cur.svc.forEach(s=>{const k=normalizeText(s.client||'');if(!k)return;const o=cliMap.get(k)||{label:s.client,v:0,n:0};o.v+=Number(s.value||0);o.n++;cliMap.set(k,o);});
+  const topCli=[...cliMap.values()].sort((a,b)=>b.v-a.v).slice(0,5).map(o=>({label:o.label,value:o.v,text:money(o.v),sub:`${o.n} visita(s)`}));
+  // ---- destaques em linguagem simples
+  const hl=[];
+  if(prev.revenue||cur.revenue){const p=prev.revenue?(cur.revenue-prev.revenue)/prev.revenue*100:null;hl.push(p===null?`Faturamento de <b>${money(cur.revenue)}</b> no período.`:`Faturamento <b>${pctText(Math.abs(p))} ${p>=0?'acima':'abaixo'}</b> do mesmo período anterior (${money(cur.revenue)} contra ${money(prev.revenue)}).`);}
+  hl.push(cur.result>=0?`Resultado líquido positivo: sobraram <b>${money(cur.result)}</b> depois de taxas e despesas.`:`Resultado líquido negativo: as despesas e taxas superaram os recebimentos em <b>${money(-cur.result)}</b>.`);
+  if(cur.count&&bestWd.v>0)hl.push(`Melhor dia da semana: <b>${wdFull[bestWd.i]}</b> (${money(bestWd.v)} em ${bestWd.n} serviço(s)).`);
+  if(mixParts.length)hl.push(`Forma de pagamento mais usada: <b>${esc(mixParts[0].label)}</b> (${pctText(mixParts[0].value/mixTotal*100)} do valor dos serviços).`);
+  if(catItems.length&&cur.spent)hl.push(`Despesa que mais pesa: <b>${esc(catItems[0].label)}</b> (${pctText(catItems[0].value/cur.spent*100)} das despesas pagas).`);
+  if(cur.extras>0)hl.push(`Serviços extras renderam <b>${money(cur.extras)}</b> em ${cur.extrasCount} serviço(s) (${cur.svcRev?pctText(cur.extras/cur.svcRev*100):'—'} do valor dos serviços).`);
+  // ---- metas e limites (formulários)
+  const st=getLocalSettings(),cats=['Produtos','Funcionários','Pró-labore','Despesa mensal','Diversos','Cartão / empréstimo'];
+  const settingsHtml=`<details class="dash-card"><summary>Metas, feriados e limites de gastos</summary>
+   <form id="goalForm" class="form-grid" style="margin-top:10px"><div class="field"><label>Meta média diária (R$)</label><input name="dailyTarget" type="number" min="0" step="0.01" value="${esc(st.dailyTarget||'')}" placeholder="Ex.: 350"></div><div class="field"><label>Feriados (AAAA-MM-DD, separados por vírgula)</label><input name="holidays" value="${esc(st.holidays||'')}" placeholder="2026-11-20"></div><div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar meta e feriados</button></div></form>
+   <p class="muted small">A meta diária × dias úteis do mês vira a meta do mês, a menos que você defina uma meta mensal em Financeiro. Domingos e feriados informados são descontados. Salvo neste aparelho.</p>
+   <form id="capsForm" class="form-grid">${cats.map(c=>`<div class="field"><label>Teto de ${esc(c)} (% do faturamento)</label><input type="number" min="0" max="100" step="0.1" name="${esc(c)}" value="${esc((st.caps||{})[c]??'')}" placeholder="Sem limite"></div>`).join('')}<div class="form-actions" style="grid-column:1/-1"><button class="primary" type="submit">Salvar limites</button></div></form></details>`;
+  const goalCard=dashRange==='month'?goalCardHtml(services,payments,allExpenses):'';
+  target.innerHTML=`<div class="dash">
+   <div class="dash-head"><div><h3>Visão geral</h3><p class="muted small">${esc(P.label)} · comparado ao mesmo período anterior</p></div></div>
+   <div class="filter-chips chips-scroll">${chip('month','Este mês')}${chip('prev','Mês anterior')}${chip('3m','3 meses')}${chip('12m','12 meses')}</div>
+   <div class="kpis">
+    ${kpi('Faturamento',money(cur.revenue),dashDelta(cur.revenue,prev.revenue),'Serviços concluídos + outras entradas','k-red')}
+    ${kpi('Recebido no caixa',money(cur.received),dashDelta(cur.received,prev.received),cur.fees>0?`Taxas de cartão: ${money(cur.fees)}`:'Dinheiro que entrou','k-green')}
+    ${kpi('Despesas pagas',money(cur.spent),dashDelta(cur.spent,prev.spent,true),cur.revenue?`${pctText(cur.spent/cur.revenue*100)} do faturamento`:'','k-gray')}
+    ${kpi('Resultado líquido',`<span class="${cur.result<0?'amount-out':'amount-in'}">${money(cur.result)}</span>`,dashDelta(cur.result,prev.result),'Recebido − taxas − despesas','k-blue')}
+    ${kpi('Serviços concluídos',String(cur.count),dashDelta(cur.count,prev.count),`Ticket médio ${money(cur.ticket)}`)}
+    ${kpi('A receber',money(cur.pending),'',cur.extras>0?`Extras vendidos: ${money(cur.extras)}`:'Pagamentos pendentes do período')}
+   </div>
+   <div class="dash-card insights"><h3>Destaques</h3><ul>${hl.map(h=>`<li>${h}</li>`).join('')}</ul></div>
+   ${goalCard}
+   <div class="dash-card"><h3>${evoTitle}</h3>${evolution}<p class="chart-note">${evoNote}</p></div>
+   ${accumulated}
+   <div class="dash-grid">
+    <div class="dash-card"><h3>Dias da semana</h3><p class="muted small">Faturamento dos serviços por dia da semana</p>${weekdayChart}</div>
+    <div class="dash-card"><h3>Como os clientes pagam</h3><p class="muted small">Valor dos serviços por forma de pagamento</p>${mixParts.length?donut(mixParts,[shortMoney(mixTotal),'em serviços']):'<p class="muted small">Sem pagamentos de serviços no período.</p>'}</div>
+    <div class="dash-card"><h3>Despesas por categoria</h3><p class="muted small">Despesas pagas no período</p>${catItems.length?hbars(catItems):'<p class="muted small">Nenhuma despesa paga no período.</p>'}${Object.keys(staff).length?`<details class="mini"><summary>Pagamentos a funcionários</summary>${Object.entries(staff).map(([n,v])=>`<div class="mini-row"><span>${esc(n)}</span><b>${money(v)}</b></div>`).join('')}</details>`:''}</div>
+    <div class="dash-card"><h3>Serviços que mais rendem</h3>${topSvc.length?hbars(topSvc):'<p class="muted small">Sem serviços concluídos no período.</p>'}</div>
+    <div class="dash-card"><h3>Melhores clientes</h3>${topCli.length?hbars(topCli):'<p class="muted small">Sem clientes no período.</p>'}</div>
+   </div>
+   ${settingsHtml}
+   <p class="dashboard-footnote">Faturamento: serviços concluídos pela data do serviço mais outras entradas (recargas de crédito não contam). Recebido: dinheiro efetivamente recebido, incluindo recargas. Resultado líquido não é lucro contábil.</p>
+  </div>`;
+  target.querySelectorAll('[data-drange]').forEach(b=>b.onclick=()=>{dashRange=b.dataset.drange;renderDashboardsV25();});
+  $('goalForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());setLocalSettings({...getLocalSettings(),dailyTarget:Number(d.dailyTarget||0),holidays:d.holidays||''});showToast('Meta salva neste aparelho.');renderDashboardsV25();};
+  $('capsForm').onsubmit=e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target).entries());const old=getLocalSettings();old.caps={};cats.forEach(c=>{if(d[c]!=='')old.caps[c]=Number(d[c]);});setLocalSettings(old);showToast('Limites salvos neste aparelho.');renderDashboardsV25();};
+  try{await checkPayablesNotifications();}catch(e){}
+ }catch(err){console.error('Erro ao carregar dashboards:',err);target.innerHTML='<div class="empty">Não foi possível carregar os dashboards. Verifique sua conexão e tente atualizar.</div>';}
+}
+renderDashboards=async function(){await renderDashboardsV25();};
+
+/* ----- Despesas por categoria ----- */
+let expMonth='', expOpen=new Set();
+const expMonthKey=()=>expMonth||localISODate().slice(0,7);
+function expenseRows(list){return list.map(e=>({'Data do pagamento':e.date||e.paidAt?dateBR(e.date||e.paidAt):'','Vencimento':e.dueDate?dateBR(e.dueDate):'','Categoria':canonicalExpenseCategory(e.category),'Subcategoria':e.subcategory||'','Descrição':e.description||'','Fornecedor':e.supplier||'','Forma de pagamento':e.payment||'','Situação':e.paymentStatus||'','Valor (R$)':Number(e.value||0)}));}
+function downloadWorkbook(sheets,filename){
+ if(!window.XLSX)throw new Error('Gerador Excel indisponível. Verifique a internet.');
+ const wb=XLSX.utils.book_new();
+ sheets.forEach(([name,rows,cols])=>{const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{'Sem registros':''}]);if(cols)ws['!cols']=cols.map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31));});
+ XLSX.writeFile(wb,filename);
+}
+async function renderExpensesPanel(){
+ try{
+  const all$=await all('expenses');
+  const key=expMonthKey(),q=normalizeText($('searchInput').value);
+  const isPaid=e=>e.paymentStatus!=='Em aberto'&&e.paymentStatus!=='Pendente';
+  const dateOf=e=>isPaid(e)?(e.date||e.paidAt||''):(e.dueDate||e.date||'');
+  const inMonth=(e,k)=>isPaid(e)&&String(e.date||e.paidAt||'').slice(0,7)===k;
+  const prevKey=(()=>{const [y,m]=key.split('-').map(Number);const d=new Date(y,m-2,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');})();
+  const monthPaid=all$.filter(e=>inMonth(e,key)),prevPaid=all$.filter(e=>inMonth(e,prevKey));
+  const openMonth=all$.filter(e=>!isPaid(e)&&String(e.dueDate||'').slice(0,7)===key);
+  const sum=a=>a.reduce((n,e)=>n+Number(e.value||0),0);
+  const total=sum(monthPaid),prevTotal=sum(prevPaid);
+  const monthLabel=new Date(Number(key.slice(0,4)),Number(key.slice(5,7))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const itemRow=e=>`<div class="exp-item"><div><b>${esc(e.description||'Despesa')}</b><br><span class="muted small">${dateBR(dateOf(e))}${e.supplier?' · '+esc(e.supplier):''}${e.subcategory?' · '+esc(e.subcategory):''}${e.payment?' · '+esc(e.payment):''}</span></div><div class="exp-item-right"><b>${money(e.value)}</b><span><button type="button" class="action" data-exp-edit="${esc(e.id)}">Editar</button> <button type="button" class="action" data-exp-del="${esc(e.id)}">Excluir</button></span></div></div>`;
+  let body;
+  if(q){
+   const found=all$.filter(e=>normalizeText([e.description,e.supplier,e.category,e.subcategory].join(' ')).includes(q)).sort((a,b)=>String(dateOf(b)).localeCompare(String(dateOf(a))));
+   body=`<p class="muted small">Resultados da busca em todas as datas (${found.length}).</p>${found.length?`<div class="exp-list">${found.slice(0,100).map(itemRow).join('')}</div>`:'<div class="empty">Nenhuma despesa encontrada.</div>'}`;
+  }else{
+   const cat=new Map();monthPaid.forEach(e=>{const c=canonicalExpenseCategory(e.category);const o=cat.get(c)||{c,v:0,list:[]};o.v+=Number(e.value||0);o.list.push(e);cat.set(c,o);});
+   const cats=[...cat.values()].sort((a,b)=>b.v-a.v);
+   body=cats.length?`<div class="exp-cats">${cats.map((o,i)=>{const open=expOpen.has(o.c);const pct=total?o.v/total*100:0;return `<div class="exp-cat"><button type="button" class="exp-cat-head" data-exp-cat="${esc(o.c)}"><span class="exp-dot" style="background:${CHART_COLORS[i%CHART_COLORS.length]}"></span><span class="exp-cat-name">${esc(o.c)}<small class="muted"> ${o.list.length} lançamento(s)</small></span><b>${money(o.v)}</b><small class="muted">${pctText(pct)}</small><span class="exp-caret">${open?'▾':'▸'}</span></button><div class="hbar-track"><i style="width:${Math.max(2,pct).toFixed(1)}%;background:${CHART_COLORS[i%CHART_COLORS.length]}"></i></div>${open?`<div class="exp-list">${o.list.sort((a,b)=>String(b.date||b.paidAt||'').localeCompare(String(a.date||a.paidAt||''))).map(itemRow).join('')}</div>`:''}</div>`;}).join('')}</div>`:'<div class="empty">Nenhuma despesa paga neste mês. Toque em “+ Nova despesa” para lançar.</div>';
+  }
+  $('tableWrap').innerHTML=`<div class="finance-toolbar"><button type="button" class="secondary" id="expPrev" aria-label="Mês anterior">‹</button><input type="month" id="expMonthInput" value="${key}"><button type="button" class="secondary" id="expNext" aria-label="Próximo mês">›</button><button type="button" class="secondary" id="expThis">Mês atual</button></div>
+   <div class="kpis kpis-2"><div class="kpi k-gray"><span class="kpi-label">Despesas pagas em ${esc(monthLabel)}</span><strong>${money(total)}</strong>${dashDelta(total,prevTotal,true)}<small class="muted">${monthPaid.length} lançamento(s)</small></div><div class="kpi"><span class="kpi-label">Em aberto com vencimento no mês</span><strong>${money(sum(openMonth))}</strong><small class="muted">${openMonth.length} conta(s) · veja em Contas a pagar</small></div></div>
+   ${body}
+   <div class="dash-card export-card"><h3>Exportar lista</h3><p class="muted small">Gera uma planilha Excel com todas as despesas do período escolhido.</p><div class="return-actions"><button type="button" class="primary" id="expExportMonth">Exportar este mês</button><button type="button" class="secondary" id="expExportAll">Exportar tudo</button></div><p id="expExportStatus" class="muted small"></p></div>`;
+  const setMonth=k=>{expMonth=k;renderExpensesPanel();};
+  $('expMonthInput').onchange=e=>setMonth(e.target.value||'');
+  $('expThis').onclick=()=>setMonth('');
+  $('expPrev').onclick=()=>setMonth(prevKey);
+  $('expNext').onclick=()=>{const [y,m]=key.split('-').map(Number);const d=new Date(y,m,1);setMonth(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));};
+  $('tableWrap').querySelectorAll('[data-exp-cat]').forEach(b=>b.onclick=()=>{const c=b.dataset.expCat;if(expOpen.has(c))expOpen.delete(c);else expOpen.add(c);renderExpensesPanel();});
+  $('tableWrap').querySelectorAll('[data-exp-edit]').forEach(b=>b.onclick=()=>{const e=all$.find(x=>x.id===b.dataset.expEdit);if(e){$('formWrap').style.display='';$('formWrap').classList.remove('hidden');renderForm(e);}});
+  $('tableWrap').querySelectorAll('[data-exp-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Excluir esta despesa?'))return;try{await remove('expenses',b.dataset.expDel);showToast('Despesa excluída.');await renderExpensesPanel();await renderStats();}catch(err){showToast('Erro ao excluir: '+err.message);}});
+  const doExport=(list,name)=>{try{downloadWorkbook([['Despesas',expenseRows(list.slice().sort((a,b)=>String(dateOf(a)).localeCompare(String(dateOf(b)))),[14,14,18,18,32,20,16,12,12])]],name);$('expExportStatus').textContent=`Arquivo gerado com ${list.length} despesa(s).`;showToast('Excel gerado.');}catch(err){$('expExportStatus').textContent='Falha ao gerar: '+err.message;}};
+  $('expExportMonth').onclick=()=>doExport(all$.filter(e=>(isPaid(e)?String(e.date||e.paidAt||''):String(e.dueDate||e.date||'')).slice(0,7)===key),`Auto_Brilho_Despesas_${key}.xlsx`);
+  $('expExportAll').onclick=()=>doExport(all$,`Auto_Brilho_Despesas_${localISODate()}.xlsx`);
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar as despesas. Verifique a conexão.</div>';console.error(err);}
+}
+
+/* ----- Relatórios: movimento financeiro só para exportação ----- */
+let movPreset='month';
+function movRange(preset){
+ const today=localISODate();const [Y,M]=today.split('-').map(Number);
+ if(preset==='prev'){const d=new Date(Y,M-2,1);return [isoDay(d.getFullYear(),d.getMonth()+1,1),isoDay(d.getFullYear(),d.getMonth()+1,new Date(Y,M-1,0).getDate())];}
+ if(preset==='year')return [isoDay(Y,1,1),today];
+ if(preset==='all')return ['',''];
+ return [isoDay(Y,M,1),today];
+}
+async function exportMovementExcel(from,to){
+ const [payments,expenses]=await Promise.all([all('payments'),all('expenses')]);
+ const inR=d=>{d=String(d||'').slice(0,10);return (!from||d>=from)&&(!to||d<=to);};
+ const rows=[];
+ payments.filter(p=>p.status!=='Estornado'&&inR(p.date)).forEach(p=>{const fee=feeOf(p);rows.push({_d:p.date,'Data':dateBR(p.date),'Tipo':'Entrada','Origem':p.kind==='credito'?'Recarga de crédito':(p.serviceId?'Serviço':'Outra entrada'),'Descrição':p.description||'Recebimento','Cliente / fornecedor':p.client||'','Forma':p.method||'','Situação':p.status||'Pendente','Valor (R$)':Number(p.value||0),'Taxa de cartão (R$)':fee,'Líquido (R$)':p.status==='Pago'?Number(p.value||0)-fee:0});});
+ expenses.filter(e=>inR(e.paymentStatus==='Pago'?(e.date||e.paidAt):(e.dueDate||e.date))).forEach(e=>{const d=e.paymentStatus==='Pago'?(e.date||e.paidAt):(e.dueDate||e.date);rows.push({_d:d,'Data':dateBR(d),'Tipo':'Saída','Origem':canonicalExpenseCategory(e.category),'Descrição':e.description||'','Cliente / fornecedor':e.supplier||'','Forma':e.payment||'','Situação':e.paymentStatus||'Em aberto','Valor (R$)':Number(e.value||0),'Taxa de cartão (R$)':0,'Líquido (R$)':e.paymentStatus==='Pago'?-Number(e.value||0):0});});
+ rows.sort((a,b)=>String(a._d).localeCompare(String(b._d)));
+ const movement=rows.map(({_d,...r})=>r);
+ const pay=r=>r['Situação']==='Pago';
+ const inc=movement.filter(r=>r['Tipo']==='Entrada'&&pay(r)),out=movement.filter(r=>r['Tipo']==='Saída'&&pay(r));
+ const s=(a,k)=>a.reduce((n,r)=>n+Number(r[k]||0),0);
+ const summary=[{'Indicador':'Período','Valor':`${from?dateBR(from):'início'} a ${to?dateBR(to):'hoje'}`},{'Indicador':'Entradas recebidas (R$)','Valor':s(inc,'Valor (R$)')},{'Indicador':'Taxas de cartão (R$)','Valor':s(inc,'Taxa de cartão (R$)')},{'Indicador':'Saídas pagas (R$)','Valor':s(out,'Valor (R$)')},{'Indicador':'Resultado realizado (R$)','Valor':s(inc,'Valor (R$)')-s(inc,'Taxa de cartão (R$)')-s(out,'Valor (R$)')},{'Indicador':'A receber (R$)','Valor':s(movement.filter(r=>r['Tipo']==='Entrada'&&r['Situação']==='Pendente'),'Valor (R$)')},{'Indicador':'A pagar (R$)','Valor':s(movement.filter(r=>r['Tipo']==='Saída'&&r['Situação']!=='Pago'),'Valor (R$)')}];
+ downloadWorkbook([['Movimento',movement,[12,9,20,36,24,16,12,12,14,12]],['Resumo',summary,[28,28]]],`Auto_Brilho_Movimento_${from||'inicio'}_${to||localISODate()}.xlsx`);
+ return movement.length;
+}
+renderFinancialMovement=async function(){
+ const box=$('financialMovement');if(!box)return;
+ const [f0,t0]=movRange(movPreset);
+ const chip=(k,l)=>`<button type="button" class="filter-chip ${movPreset===k?'active':''}" data-mpreset="${k}">${l}</button>`;
+ box.innerHTML=`<div class="dash-card export-card"><h3>Movimento financeiro completo</h3><p class="muted small">Todas as entradas e saídas em uma planilha Excel (abas Movimento e Resumo). Escolha o período e exporte.</p>
+  <div class="filter-chips chips-scroll">${chip('month','Este mês')}${chip('prev','Mês anterior')}${chip('year','Este ano')}${chip('all','Todo o período')}</div>
+  <div class="form-grid"><div class="field"><label>De</label><input type="date" id="movFrom" value="${esc(f0)}"></div><div class="field"><label>Até</label><input type="date" id="movTo" value="${esc(t0)}"></div></div>
+  <button type="button" class="primary wide" id="movExport">Exportar movimento (Excel)</button><p id="movStatus" class="muted small"></p></div>`;
+ box.querySelectorAll('[data-mpreset]').forEach(b=>b.onclick=()=>{movPreset=b.dataset.mpreset;renderFinancialMovement();});
+ $('movExport').onclick=async()=>{
+  const st=$('movStatus');st.textContent='Gerando planilha...';
+  try{const n=await exportMovementExcel($('movFrom').value,$('movTo').value);st.textContent=`Planilha gerada com ${n} lançamento(s).`;showToast('Excel gerado.');}
+  catch(err){st.textContent='Falha ao gerar: '+err.message;}
+ };
+};
 
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
 let financeMonth='', financeKind='all', financeCfgOpen=false;

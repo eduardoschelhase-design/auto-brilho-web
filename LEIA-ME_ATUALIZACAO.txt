@@ -1,20 +1,36 @@
 AUTO BRILHO WEB — ATUALIZAÇÃO v25 (sobre a v24; inclui tudo da v24)
 
-CORREÇÕES DESTA VERSÃO
-1) Despesas e Contas a pagar: ao tocar em “Nova despesa” ou “Nova conta a pagar”, a área do formulário agora é reexibida corretamente.
-2) Importação de despesas: o leitor aceita tanto os cabeçalhos da planilha-modelo (“Valor (R$)”, “Data do pagamento”, “Data de vencimento”, “Forma de pagamento”) quanto os cabeçalhos dos relatórios exportados (“Valor”, “Data pagamento”, “Vencimento”, “Forma”).
-3) Recuperação de valores zerados: ao reimportar uma planilha com valor válido, o aplicativo atualiza o registro de despesa já existente quando o valor salvo está em zero, em vez de ignorá-lo como duplicado. A importação informa quantas despesas existentes tiveram o valor corrigido. Valores já diferentes de zero não são sobrescritos automaticamente.
+SE ALGO DER ERRADO: volte ao ZIP da v24 e avise qual tela falhou.
 
-IMPORTANTE
-- Antes da importação, o aplicativo continua gerando um backup JSON automático. Guarde esse arquivo.
-- Para corrigir os valores zerados, selecione a planilha que contém os valores corretos e confirme a importação. Confira a prévia e o resumo final.
-- A correção não altera o Supabase nem apaga os registros; ela atualiza somente despesas identificadas como correspondentes e atualmente zeradas.
-- Não substitua nem altere o arquivo config.js já configurado no GitHub.
+1) PAGAMENTO FRACIONADO (Serviços)
+- No serviço concluído e recebido aparece "+ Dividir pagamento". Ex.: R$ 20 em dinheiro + R$ 50 em Pix, ou
+  Pix + crédito de saldo/lavagem. Com duas formas, ao digitar o valor de uma, a outra se ajusta sozinha;
+  com três ou mais, um aviso mostra quanto falta ou passou. A soma precisa fechar o valor do serviço.
+- Cada forma vira um recebimento próprio (taxa de cartão por forma, crédito consumido só na parte paga com crédito).
+  Editar permite voltar para forma única; cancelar o serviço estorna todas as partes.
+- O funcionário também divide (dinheiro, Pix, cartão); o dono gera os pagamentos ao abrir o app.
+- O rascunho do lançamento também guarda a divisão.
 
-Arquivos alterados: app.js, index.html, sw.js e este LEIA-ME_ATUALIZACAO.txt. Cache atualizado para v25.
+2) RELATÓRIOS: o movimento financeiro virou um cartão de exportação (sem tabela aberta): escolha o período
+   (este mês, mês anterior, este ano, todo o período ou datas) e exporte o Excel com as abas Movimento e Resumo.
 
---- HISTÓRICO v24 ---
+3) DESPESAS: tela visual com o total do mês, comparação com o mês anterior, em aberto com vencimento no mês e
+   barras por categoria. Toque na categoria para ver (e editar/excluir) os lançamentos. Navegue entre os meses.
+   Exportar este mês / exportar tudo em Excel. A busca procura em todas as datas.
 
+4) DASHBOARDS (novo visual)
+- Removida a lista amarela de contas próximas do vencimento ou vencidas (as notificações continuam).
+- Período: este mês, mês anterior, 3 ou 12 meses, sempre comparando com o mesmo período anterior (▲▼).
+- 6 indicadores (faturamento, recebido, despesas, resultado líquido, serviços e ticket médio, a receber),
+  "Destaques" em frases simples, meta do mês (mês atual), faturamento por dia ou por mês x despesas,
+  faturamento acumulado com linha da meta, dias da semana, formas de pagamento, despesas por categoria
+  (com alerta de teto), serviços que mais rendem e melhores clientes.
+- Metas diárias, feriados e tetos de gasto ficam num bloco recolhido no final (salvos neste aparelho).
+  A meta do mês usa a meta mensal de Financeiro ou, se não houver, meta diária x dias úteis.
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v25). Não mexa no config.js.
+
+--- v24 ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v24 (sobre a v23; inclui tudo da v23)
 
 SE ALGO DER ERRADO: volte ao ZIP da v23 e avise qual tela falhou.
