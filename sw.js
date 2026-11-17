@@ -1,5 +1,5 @@
-const CACHE='auto-brilho-web-v24';
-const CORE=['./','./index.html','./style.css?v=24','./app.js?v=24','./config.js','./manifest.json','./icon-192.png','./icon-512.png'];
+const CACHE='auto-brilho-web-v25';
+const CORE=['./','./index.html','./style.css?v=25','./app.js?v=25','./config.js','./manifest.json','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
 });
