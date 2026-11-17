@@ -8,13 +8,13 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <title>Auto Brilho | Gestão</title>
 </head>
 <body>
 <header class="topbar">
  <div class="brandmark">AB</div>
- <div><strong>Auto Brilho</strong><small>Gestão automotiva</small></div>
+ <div><strong>Auto Brilho</strong><small>Gestão automotiva · v24</small></div>
  <button id="logoutBtn" class="install hidden" type="button">Sair</button>
  <button id="installBtn" class="install hidden" type="button">Instalar</button>
 </header>
@@ -77,10 +77,21 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 <script>
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=23').catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
+ let hadController=!!navigator.serviceWorker.controller;
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{
+  if(!hadController){hadController=true;return;}
+  if(document.getElementById('updateBanner'))return;
+  const b=document.createElement('div');b.id='updateBanner';
+  b.innerHTML='<span>Nova versão do aplicativo disponível.</span><button type="button" id="updateNow">Atualizar agora</button>';
+  document.body.appendChild(b);
+  document.getElementById('updateNow').onclick=()=>location.reload();
+ });
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=24').then(reg=>{
+  if(reg&&reg.update)document.addEventListener('visibilitychange',()=>{if(!document.hidden)reg.update().catch(()=>{});});
+ }).catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
 }
 </script>
 </body>

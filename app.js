@@ -357,8 +357,9 @@ function renderServiceForm(item={}){
        <option value="">Selecione...</option><option value="Recebido" ${item.paymentStatus==='Recebido'?'selected':''}>Recebido</option><option value="Pendente" ${item.paymentStatus==='Pendente'?'selected':''}>Pendente</option>
       </select></div>
       <div class="field"><label>Tipo de pagamento *</label><select name="paymentMethod" id="servicePaymentMethod">
-       <option value="">Selecione...</option>${paymentMethods.map(o=>`<option ${item.paymentMethod===o?'selected':''}>${o}</option>`).join('')}
+       <option value="">Selecione...</option>${serviceMethodList(item).map(o=>`<option ${item.paymentMethod===o?'selected':''}>${o}</option>`).join('')}
       </select></div>
+      <div id="serviceCreditInfo" class="muted small" style="grid-column:1/-1"></div>
       <div class="field ${item.paymentStatus==='Recebido'?'':'hidden'}" id="serviceReceivedDateWrap">
        <label>Data do recebimento *</label>
        <input name="receivedDate" id="serviceReceivedDate" type="date" value="${esc(item.receivedDate||(!item.id?localISODate():''))}">
@@ -382,6 +383,10 @@ function renderServiceForm(item={}){
  (Array.isArray(item.extras)?item.extras:[]).forEach(x=>addExtraRow(x.description,decimalText(x.value)));
  $('addServiceExtra').onclick=()=>addExtraRow();
  form.elements.value.addEventListener('input',updateTotal);updateTotal();
+ // Rascunho: se o sistema fechar o app em segundo plano (ex.: conferir um Pix), o lançamento é retomado.
+ const saveDraft=()=>{try{const v=Object.fromEntries(new FormData(form).entries());localStorage.setItem(DRAFT_KEY,JSON.stringify({t:Date.now(),id:item.id||null,values:v,extras:[...extrasBox.querySelectorAll('.extra-row')].map(r=>({d:r.querySelector('.extra-desc').value,v:r.querySelector('.extra-value').value}))}));}catch(e){}};
+ form.addEventListener('input',saveDraft);form.addEventListener('change',saveDraft);
+ $('cancelForm').addEventListener('click',clearServiceDraft);
  const statusInput=$('serviceStatus');
  const paymentFields=$('servicePaymentFields');
  function togglePaymentFields(){
@@ -401,6 +406,14 @@ function renderServiceForm(item={}){
  }
  if(statusInput)statusInput.addEventListener('change',togglePaymentFields);
  $('servicePaymentStatus').addEventListener('change',()=>toggleReceivedDate(true));
+ const updateCreditInfo=async()=>{
+  const box=$('serviceCreditInfo');if(!box)return;
+  if(isEmployee()||!isCreditMethod($('servicePaymentMethod').value)){box.textContent='';return;}
+  const who=($('serviceClient').value||item.client||'').trim();
+  if(!who){box.textContent='Busque o veículo para ver o crédito do cliente.';return;}
+  try{const sm=creditSummary(await all('payments'),who,item.id);box.textContent=`Crédito de ${who}: saldo ${money(sm.saldo)} · ${sm.lavagens} lavagem(ns).`;}catch(e){box.textContent='';}
+ };
+ $('servicePaymentMethod').addEventListener('change',updateCreditInfo);updateCreditInfo();
  togglePaymentFields();
  plateInput.addEventListener('input',()=>{
   const start=plateInput.selectionStart; plateInput.value=normalizePlate(plateInput.value);
@@ -448,6 +461,11 @@ function renderServiceForm(item={}){
    data.value=Math.round((baseValue+extrasTotal)*100)/100; // valor total: é o que alimenta o financeiro
    data.vehicle=normalizePlate(data.vehicle);
    if(isEmployee())data.financeSyncPending=true;
+   if(!isEmployee()&&data.status==='Concluído'&&data.paymentStatus==='Recebido'&&isCreditMethod(data.paymentMethod)){
+    const sm=creditSummary(await all('payments'),data.client,item.id);
+    if(data.paymentMethod===CREDIT_METHODS.saldo&&sm.saldo<data.value&&!confirm(`Saldo insuficiente: ${money(sm.saldo)} disponível para um serviço de ${money(data.value)}. O saldo do cliente ficará negativo. Continuar mesmo assim?`))throw new Error('Escolha outra forma de pagamento ou registre uma recarga antes.');
+    if(data.paymentMethod===CREDIT_METHODS.lavagem&&sm.lavagens<1&&!confirm('Este cliente não tem lavagens pré-pagas disponíveis. Continuar mesmo assim?'))throw new Error('Escolha outra forma de pagamento ou registre um pacote antes.');
+   }
    if(data.status==='Concluído'){
     if(!data.paymentStatus||!data.paymentMethod)throw new Error('Informe se foi recebido ou pendente e o tipo de pagamento.');
     if(data.paymentStatus==='Recebido'){
@@ -459,7 +477,7 @@ function renderServiceForm(item={}){
    if(isEmployee()){/* sem acesso ao financeiro: o dono concilia depois */}
    else if(saved.status==='Concluído')await syncServicePayment(saved);
    else await cancelLinkedServicePayment(saved.id);
-   editId=null;showToast('Serviço salvo na nuvem.');
+   clearServiceDraft();editId=null;showToast('Serviço salvo na nuvem.');
    if(saved.status===READY_STATUS)await showReadyNotice(saved);else $('formWrap').classList.add('hidden');
    await renderTable();if(!isEmployee()){await renderStats();await renderFinancialMovement();}
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique a conexão.'));}
@@ -471,11 +489,11 @@ async function syncServicePayment(service){
  const payments=await all('payments');
  const existing=payments.find(p=>p.serviceId===service.id);
  const method=service.paymentMethod||'';
- const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?'Pago':'Pendente';
+ const status=method==='Brinde'?'Brinde':service.paymentStatus==='Recebido'?(isCreditMethod(method)?'Crédito':'Pago'):'Pendente';
  // A data do serviço e a data do recebimento são eventos diferentes.
  // Para recebimentos, usa a data informada no serviço; para pendências,
  // mantém a data do serviço apenas como referência na lista de pendentes.
- const paymentDate=status==='Pago'?(service.receivedDate||localISODate()):service.date;
+ const paymentDate=(status==='Pago'||status==='Crédito')?(service.receivedDate||localISODate()):service.date;
  const payment={
   ...(existing?{id:existing.id}:{}),
   serviceId:service.id,date:paymentDate,client:service.client,
@@ -874,6 +892,7 @@ async function renderTable(){
  if(active==='payments'){await renderFinancePanel();return;}
  if(active==='retorno'){await renderReturnPanel();return;}
  if(active==='services'){await renderServicesPanel();return;}
+ if(active==='credits'){await renderCreditsPanel();return;}
 
  const m=modules[active];
 
@@ -1092,7 +1111,7 @@ async function renderDashboards(){
    const revenue=services
     .filter(s=>s.status==='Concluído' && s.date && s.date.slice(0,7)===m.key)
     .reduce((sum,s)=>sum+Number(s.value||0),0)
-    +payments.filter(p=>!p.serviceId && p.status==='Pago' && p.date && p.date.slice(0,7)===m.key)
+    +payments.filter(p=>!p.serviceId && p.kind!=='credito' && p.status==='Pago' && p.date && p.date.slice(0,7)===m.key)
      .reduce((sum,p)=>sum+Number(p.value||0),0);
    const received=payments.filter(p=>p.status==='Pago' && p.date && p.date.slice(0,7)===m.key)
     .reduce((sum,p)=>sum+Number(p.value||0),0);
@@ -1405,7 +1424,7 @@ async function renderStats(){
    .filter(s=>s.status==='Concluído')
    .reduce((s,p)=>s+Number(p.value||0),0);
   const legacyPaid=periodPayments
-   .filter(p=>p.status==='Pago'&&!p.serviceId)
+   .filter(p=>p.status==='Pago'&&!p.serviceId&&p.kind!=='credito')
    .reduce((s,p)=>s+Number(p.value||0),0);
   const paid=serviceRevenue+legacyPaid;
   const received=periodPayments
@@ -1501,6 +1520,7 @@ async function renderDailyClose(){
   const totalReceived=received.reduce((n,p)=>n+Number(p.value||0),0);
   const totalPending=pending.reduce((n,p)=>n+Number(p.value||0),0);
   const totalGifts=gifts.reduce((n,p)=>n+Number(p.value||0),0);
+  const creditUsed=payments.filter(p=>p.date===date&&p.status==='Crédito').reduce((n,p)=>n+Number(p.value||0),0);
   const totalExpenses=expenses.reduce((n,e)=>n+Number(e.value||0),0);
   const totalPayables=payables.reduce((n,e)=>n+Number(e.value||0),0);
   $('tableWrap').innerHTML=`
@@ -1512,6 +1532,7 @@ async function renderDailyClose(){
      <div class="dashboard-metric"><span>Recebido</span><strong>${money(totalReceived)}</strong></div>
      <div class="dashboard-metric"><span>Pendente</span><strong>${money(totalPending)}</strong></div>
      <div class="dashboard-metric"><span>Brindes</span><strong>${money(totalGifts)}</strong></div>
+     <div class="dashboard-metric"><span>Pago com crédito</span><strong>${money(creditUsed)}</strong></div>
      <div class="dashboard-metric"><span>Despesas pagas</span><strong>${money(totalExpenses)}</strong></div>
      <div class="dashboard-metric"><span>Saldo após despesas</span><strong>${money(totalReceived-totalExpenses)}</strong></div>
      <div class="dashboard-metric"><span>Contas a pagar em aberto</span><strong>${money(totalPayables)}</strong></div>
@@ -1623,8 +1644,12 @@ async function enterApp(){
   try{const {data:{session}}=await sbClient.auth.getSession();applySession(session&&session.user);}catch(e){console.error('Não foi possível ler o perfil do usuário:',e);}
   if(isEmployee()){if(!EMPLOYEE_TABS.includes(active))active='services';}
   else{await reconcileEmployeeServices();}
+  const restored=restoreUiStateOnce();
+  if(isEmployee()&&!EMPLOYEE_TABS.includes(active))active='services';
   renderTabs();
-  renderSection();
+  restoringState=true;renderSection();restoringState=false;
+  appActive=true;
+  if(restored)finishRestore(restored);
   if(!isEmployee()){await renderStats();await checkPayablesNotifications();}
   subscribeRealtime();
  }finally{
@@ -1718,7 +1743,8 @@ async function init(){
   btn.textContent='Saindo...';
   setLoginMessage('Encerrando sua sessão...');
   try{
-   const {error}=await sbClient.auth.signOut({scope:'local'});
+   const {error}=appActive=false;try{localStorage.removeItem(UI_STATE_KEY);localStorage.removeItem(DRAFT_KEY);}catch(e){}
+   await sbClient.auth.signOut({scope:'local'});
    if(error)throw error;
    if(realtimeChannel){
     await sbClient.removeChannel(realtimeChannel);
@@ -1850,7 +1876,7 @@ function selectedVehicleForClient(client,vehicles){
 renderTabs=function(){
  const tabs=[
   ['home','⌂','Início'],['dashboard','▥','Dashboards'],['clients','♙','Cadastro'],['retorno','↺','Retorno'],['services','✦','Serviços'],
-  ['payments','R$','Financeiro'],['pending','◷','Pendentes'],
+  ['payments','R$','Financeiro'],['credits','◎','Créditos'],['pending','◷','Pendentes'],
   ['expenses','−','Despesas'],['payables','◷','Contas a pagar'],['reports','▤','Relatórios']
  ];
  $('tabs').innerHTML=tabs.filter(t=>!isEmployee()||EMPLOYEE_TABS.includes(t[0])).map(([key,icon,label])=>`<button class="tab ${key===active?'active':''}" data-tab="${key}">${icon} ${label}</button>`).join('');
@@ -1862,6 +1888,7 @@ renderTabs=function(){
 renderSection=function(){
  if(isEmployee()&&!EMPLOYEE_TABS.includes(active))active='services';
  if(active!=='clients')cadastroView='list';
+ if(!restoringState)clearServiceDraft();
  // Ao entrar/trocar de seção, descarta qualquer formulário anterior.
  // Os campos de Cadastro só são recriados pelo botão + Novo cliente.
  $('formWrap').innerHTML='';
@@ -1874,11 +1901,11 @@ renderSection=function(){
  if(reports){$('sectionTitle').textContent='Relatórios e importação';$('exportStatus').textContent='';renderFinancialMovement();return;}
  const special=home||dashboard||active==='pending'||active==='retorno';
  $('sectionEyebrow').textContent=home?'RESUMO DO NEGÓCIO':dashboard?'ANÁLISE E METAS':'CADASTROS E CONTROLE';
- $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='retorno'?'Retorno de clientes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':modules[active]?.label||'Gestão';
+ $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='retorno'?'Retorno de clientes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':active==='credits'?'Créditos dos clientes':modules[active]?.label||'Gestão';
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
- $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':'Buscar neste cadastro…';
+ $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':active==='credits'?'+ Nova recarga':'+ Novo '+(modules[active]?.singular||'registro');
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':active==='credits'?'Buscar cliente…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
@@ -2270,7 +2297,7 @@ function goalCardHtml(services,payments,expenses){
  const today=localISODate(),key=today.slice(0,7);
  const [Y,M,D]=today.split('-').map(Number);const daysInMonth=new Date(Y,M,0).getDate();
  const inMonth=d=>String(d||'').slice(0,7)===key;
- const revenue=services.filter(s=>s.status==='Concluído'&&inMonth(s.date)).reduce((n,s)=>n+Number(s.value||0),0)+payments.filter(p=>!p.serviceId&&p.status==='Pago'&&inMonth(p.date)).reduce((n,p)=>n+Number(p.value||0),0);
+ const revenue=services.filter(s=>s.status==='Concluído'&&inMonth(s.date)).reduce((n,s)=>n+Number(s.value||0),0)+payments.filter(p=>!p.serviceId&&p.kind!=='credito'&&p.status==='Pago'&&inMonth(p.date)).reduce((n,p)=>n+Number(p.value||0),0);
  const monthExpenses=expenses.filter(e=>e.paymentStatus==='Pago'?inMonth(e.date||e.paidAt):((e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente')&&inMonth(e.dueDate))).reduce((n,e)=>n+Number(e.value||0),0);
  const cover=monthExpenses>0?(revenue>=monthExpenses?`O faturamento já cobre as despesas do mês (${money(monthExpenses)}).`:`Faltam ${money(monthExpenses-revenue)} para cobrir as despesas do mês (${money(monthExpenses)}).`):'';
  if(!goal)return `<div class="goal-card"><strong>Meta do mês</strong><p class="muted small">Faturado no mês: ${money(revenue)}. Defina a meta em Financeiro → “Taxas de cartão e meta do mês”.</p>${cover?`<p class="muted small">${cover}</p>`:''}</div>`;
@@ -2595,6 +2622,181 @@ async function renderDuplicatesPanel(){
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os cadastros. Verifique a conexão.</div>';console.error(err);}
 }
 
+/* ===== v24: retomar de onde parou, rascunho do serviço e créditos de clientes ===== */
+const UI_STATE_KEY='ab_ui_state', DRAFT_KEY='ab_service_draft', UI_STATE_MAX_AGE=8*3600*1000;
+let appActive=false, hiddenAt=0, restoringState=false, uiRestoreDone=false;
+const KNOWN_TABS=['home','dashboard','clients','retorno','services','payments','credits','pending','expenses','payables','reports'];
+function saveUiState(){
+ if(!appActive)return;
+ try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({t:Date.now(),active,search:$('searchInput').value,scrollY:window.scrollY||document.documentElement.scrollTop||0,svcRange,svcDay,svcStatus,financeMonth,financeKind,returnDays,returnShowContacted,cadastroView,creditsFilter}));}catch(e){}
+}
+function clearServiceDraft(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
+function readJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
+function restoreUiStateOnce(){
+ if(uiRestoreDone)return null;uiRestoreDone=true;
+ let st=readJson(UI_STATE_KEY),draft=readJson(DRAFT_KEY);
+ if(st&&Date.now()-st.t>=UI_STATE_MAX_AGE)st=null;
+ if(draft&&Date.now()-draft.t>=UI_STATE_MAX_AGE)draft=null;
+ if(!st&&!draft)return null;
+ if(st&&KNOWN_TABS.includes(st.active)&&(!isEmployee()||EMPLOYEE_TABS.includes(st.active))&&(st.active!=='credits'||!isEmployee())){
+  active=st.active;svcRange=st.svcRange||svcRange;svcDay=st.svcDay||'';svcStatus=st.svcStatus||'all';
+  financeMonth=st.financeMonth||'';financeKind=st.financeKind||'all';returnDays=st.returnDays||30;returnShowContacted=!!st.returnShowContacted;
+  cadastroView=st.cadastroView||'list';creditsFilter=st.creditsFilter||'with';
+ }
+ if(draft)active='services';
+ return {st,draft};
+}
+const waitFor=async(fn,ms=3000)=>{const t0=Date.now();while(Date.now()-t0<ms){try{if(fn())return true;}catch(e){}await new Promise(r=>setTimeout(r,80));}return false;};
+async function restoreServiceDraft(draft){
+ if(!draft||!draft.values)return;
+ try{
+  let item={};
+  if(draft.id)item=(await all('services')).find(s=>s.id===draft.id)||{};
+  renderForm(item);
+  $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
+  const v=draft.values;
+  if(!draft.id&&v.plate){
+   $('servicePlate').value=v.plate;
+   $('findServiceVehicle').click();
+   await waitFor(()=>!$('serviceDetails').classList.contains('hidden'),4000);
+  }
+  const form=$('recordForm');
+  for(const [name,val] of Object.entries(v)){
+   if(name==='plate'||name==='client'||name==='vehicle')continue;
+   const el=form.elements[name];if(!el)continue;
+   el.value=val;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  const box=$('serviceExtras');while(box.firstChild)box.firstChild.remove();
+  (draft.extras||[]).forEach(x=>{$('addServiceExtra').click();const row=box.lastElementChild;row.querySelector('.extra-desc').value=x.d||'';row.querySelector('.extra-value').value=x.v||'';});
+  form.elements.value.dispatchEvent(new Event('input',{bubbles:true}));
+  showToast('Retomamos o serviço que você estava lançando.');
+ }catch(e){console.error('Não foi possível retomar o rascunho:',e);}
+}
+async function finishRestore(r){
+ try{
+  const skipSearch=['home','dashboard','reports','pending'].includes(active);
+  if(r.st&&r.st.search&&!skipSearch){$('searchInput').value=r.st.search;await renderTable();}
+  if(r.draft&&active==='services')await restoreServiceDraft(r.draft);
+  const y=(r.st&&r.st.scrollY)||0;
+  if(y>0){setTimeout(()=>window.scrollTo(0,y),400);setTimeout(()=>window.scrollTo(0,y),1400);}
+ }catch(e){console.error(e);}
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden){hiddenAt=Date.now();saveUiState();return;}
+ // Ao voltar depois de um tempo (ex.: conferir um Pix), atualiza os dados da tela sem mexer em formulários abertos.
+ if(appActive&&hiddenAt&&Date.now()-hiddenAt>45000){hiddenAt=0;try{$('refreshBtn').onclick();}catch(e){console.error(e);}}
+});
+window.addEventListener('pagehide',saveUiState);
+setInterval(saveUiState,20000);
+
+/* ----- Créditos de clientes (saldo em reais e pacotes de lavagens) ----- */
+const CREDIT_METHODS={saldo:'Crédito (saldo)',lavagem:'Crédito (lavagem)'};
+const isCreditMethod=m=>m===CREDIT_METHODS.saldo||m===CREDIT_METHODS.lavagem;
+const round2c=n=>Math.round((Number(n)||0)*100)/100;
+function creditSummary(payments,clientName,excludeServiceId){
+ let saldo=0,lavagens=0;const moves=[];
+ payments.forEach(p=>{
+  if(!sameClient(p.client,clientName))return;
+  if(p.kind==='credito'&&p.status==='Pago'){
+   if(p.creditType==='lavagens')lavagens+=Number(p.washes||0);
+   else saldo+=Number(p.creditValue!==undefined&&p.creditValue!==null&&p.creditValue!==''?p.creditValue:p.value||0);
+   moves.push({type:'recarga',p});
+  }else if(p.status==='Crédito'&&p.serviceId&&p.serviceId!==excludeServiceId&&isCreditMethod(p.method)){
+   if(p.method===CREDIT_METHODS.lavagem)lavagens-=1;else saldo-=Number(p.value||0);
+   moves.push({type:'uso',p});
+  }
+ });
+ return {saldo:round2c(saldo),lavagens,moves};
+}
+const serviceMethodList=item=>{const base=['Dinheiro','Pix','Cartão','Brinde'];const l=isEmployee()?base:[...base,CREDIT_METHODS.saldo,CREDIT_METHODS.lavagem];if(item&&item.paymentMethod&&!l.includes(item.paymentMethod))l.push(item.paymentMethod);return l;};
+let creditsFilter='with', creditsOpen=new Set();
+async function renderCreditsPanel(){
+ try{
+  const [payments,clients]=await Promise.all([all('payments'),all('clients')]);
+  const q=normalizeText($('searchInput').value);
+  const names=new Map();
+  payments.forEach(p=>{if(p.kind==='credito'||(p.status==='Crédito'&&isCreditMethod(p.method))){const k=normalizeText(p.client);if(k&&!names.has(k))names.set(k,p.client);}});
+  const rows=[...names.entries()].map(([k,name])=>{const sm=creditSummary(payments,name);const last=sm.moves.map(m=>m.p.date||'').sort().pop()||'';return {k,name,client:clients.find(c=>sameClient(c.name,name)),...sm,last};});
+  const has=r=>r.saldo>0.004||r.lavagens>0, neg=r=>r.saldo<-0.004||r.lavagens<0;
+  const cnt={with:rows.filter(has).length,without:rows.filter(r=>!has(r)&&!neg(r)).length,neg:rows.filter(neg).length,all:rows.length};
+  let list=rows.filter(r=>!q||normalizeText(r.name).includes(q)||normalizeText(r.client&&r.client.phone).includes(q));
+  list=list.filter(r=>creditsFilter==='all'||(creditsFilter==='with'&&has(r))||(creditsFilter==='without'&&!has(r)&&!neg(r))||(creditsFilter==='neg'&&neg(r)));
+  list.sort((a,b)=>b.saldo-a.saldo||b.lavagens-a.lavagens||a.name.localeCompare(b.name));
+  const totalSaldo=rows.reduce((n,r)=>n+Math.max(0,r.saldo),0),totalWash=rows.reduce((n,r)=>n+Math.max(0,r.lavagens),0);
+  const monthKey=localISODate().slice(0,7);
+  const rechargesMonth=payments.filter(p=>p.kind==='credito'&&p.status==='Pago'&&String(p.date||'').slice(0,7)===monthKey).reduce((n,p)=>n+Number(p.value||0),0);
+  const chip=(k,label)=>`<button type="button" class="filter-chip ${creditsFilter===k?'active':''}" data-cfilter="${k}">${label} (${cnt[k]})</button>`;
+  const moveHtml=m=>{const p=m.p;const d=dateBR(p.date);
+   if(m.type==='recarga')return `<div class="credit-move"><span>${d} · ${p.creditType==='lavagens'?`Pacote de ${Number(p.washes||0)} lavagem(ns) (${money(p.value)})`:`Recarga ${money(p.creditValue!==undefined&&p.creditValue!==null&&p.creditValue!==''?p.creditValue:p.value)}${Number(p.creditValue)>Number(p.value)?' (pago '+money(p.value)+')':''}`} · ${esc(p.method||'')}</span><span><button type="button" class="action" data-credit-edit="${esc(p.id)}">Editar</button> <button type="button" class="action" data-credit-del="${esc(p.id)}">Excluir</button></span></div>`;
+   return `<div class="credit-move"><span class="muted">${d} · Uso: ${esc(p.description||'Serviço')} · ${p.method===CREDIT_METHODS.lavagem?'1 lavagem':'− '+money(p.value)}</span></div>`;};
+  $('tableWrap').innerHTML=`<div class="dashboard-metrics compact" style="margin-bottom:10px"><div class="dashboard-metric"><span>Clientes com crédito</span><strong>${cnt.with}</strong></div><div class="dashboard-metric"><span>Saldo em aberto</span><strong>${money(totalSaldo)}</strong></div><div class="dashboard-metric"><span>Lavagens pré-pagas</span><strong>${totalWash}</strong></div><div class="dashboard-metric"><span>Recargas no mês</span><strong>${money(rechargesMonth)}</strong></div></div>
+   <div class="filter-chips chips-scroll">${chip('with','Com crédito')}${chip('neg','Negativos')}${chip('without','Zerados')}${chip('all','Todos')}</div>
+   <p class="muted small">Recargas entram como dinheiro recebido; os serviços pagos com crédito entram como serviço realizado, sem novo recebimento. Cadastre a recarga aqui e, no serviço, escolha “Crédito (saldo)” ou “Crédito (lavagem)”.</p>
+   ${list.length?`<div class="svc-list">${list.map(r=>{const open=creditsOpen.has(r.k);const moves=r.moves.slice().sort((a,b)=>String(b.p.date||'').localeCompare(String(a.p.date||'')));
+    return `<article class="svc-card credit-card"><div class="svc-head"><strong>${esc(r.name)}</strong><span class="status-badge ${neg(r)?'st-cancelado':has(r)?'st-pronto-para-retirada':'st-concluido'}">${neg(r)?'Negativo':has(r)?'Com crédito':'Zerado'}</span></div>
+     <div class="credit-balances"><div><span class="muted small">Saldo</span><strong class="${r.saldo<0?'amount-out':''}">${money(r.saldo)}</strong></div><div><span class="muted small">Lavagens</span><strong class="${r.lavagens<0?'amount-out':''}">${r.lavagens}</strong></div></div>
+     <div class="muted small">${r.client&&r.client.phone?esc(r.client.phone)+' · ':''}${r.last?'última movimentação em '+dateBR(r.last):''}</div>
+     <div class="svc-actions"><button type="button" class="primary small-btn" data-credit-add="${esc(r.name)}">Recarregar</button><button type="button" class="action" data-credit-ext="${esc(r.k)}">${open?'Ocultar extrato':'Extrato'}</button></div>
+     ${open?`<div class="credit-moves">${moves.map(moveHtml).join('')||'<div class="muted small">Sem movimentações.</div>'}</div>`:''}</article>`;}).join('')}</div>`:`<div class="empty">${rows.length?'Nenhum cliente neste filtro.':'Ainda não há créditos. Toque em “+ Nova recarga” para registrar o primeiro.'}</div>`}`;
+  $('tableWrap').querySelectorAll('[data-cfilter]').forEach(b=>b.onclick=()=>{creditsFilter=b.dataset.cfilter;renderCreditsPanel();});
+  $('tableWrap').querySelectorAll('[data-credit-ext]').forEach(b=>b.onclick=()=>{const k=b.dataset.creditExt;if(creditsOpen.has(k))creditsOpen.delete(k);else creditsOpen.add(k);renderCreditsPanel();});
+  $('tableWrap').querySelectorAll('[data-credit-add]').forEach(b=>b.onclick=()=>renderCreditForm(b.dataset.creditAdd));
+  $('tableWrap').querySelectorAll('[data-credit-edit]').forEach(b=>b.onclick=()=>{const p=payments.find(x=>x.id===b.dataset.creditEdit);if(p)renderCreditForm('',p);});
+  $('tableWrap').querySelectorAll('[data-credit-del]').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Excluir esta recarga? O saldo do cliente será recalculado.'))return;
+   try{await remove('payments',b.dataset.creditDel);showToast('Recarga excluída.');await renderCreditsPanel();await renderStats();}
+   catch(err){showToast('Erro ao excluir: '+err.message);}
+  });
+ }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os créditos. Verifique a conexão.</div>';console.error(err);}
+}
+async function renderCreditForm(prefill='',item={}){
+ if(isEmployee())return;
+ editId=item.id??null;
+ const type=item.creditType||'valor';
+ const methods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência'];if(item.method&&!methods.includes(item.method))methods.push(item.method);
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
+ $('formWrap').innerHTML=`<form id="creditForm"><h3>${item.id?'Editar recarga':'Nova recarga de crédito'}</h3><div class="form-grid">
+  <div class="field"><label>Cliente *</label><input name="client" list="creditClients" required autocomplete="off" value="${esc(item.client||prefill)}" placeholder="Digite o nome do cliente"><datalist id="creditClients"></datalist></div>
+  <div class="field"><label>Tipo de crédito *</label><select name="creditType" id="creditType"><option value="valor" ${type==='valor'?'selected':''}>Saldo em reais</option><option value="lavagens" ${type==='lavagens'?'selected':''}>Pacote de lavagens</option></select></div>
+  <div class="field"><label>Valor pago (R$) *</label><input name="value" inputmode="decimal" required value="${item.value!==undefined?esc(decimalText(item.value)):''}" placeholder="0,00"></div>
+  <div class="field ${type==='valor'?'':'hidden'}" id="creditValueWrap"><label>Valor creditado (R$)</label><input name="creditValue" inputmode="decimal" value="${item.creditValue!==undefined&&item.creditValue!==null&&item.creditValue!==''?esc(decimalText(item.creditValue)):''}" placeholder="igual ao valor pago"><small class="muted">Preencha só se houver bônus (ex.: pagou 100 e ganhou 110).</small></div>
+  <div class="field ${type==='lavagens'?'':'hidden'}" id="creditWashesWrap"><label>Quantidade de lavagens *</label><input name="washes" type="number" min="1" step="1" value="${item.washes?esc(item.washes):''}"></div>
+  <div class="field"><label>Forma de pagamento *</label><select name="method" required><option value="">Selecione...</option>${methods.map(o=>`<option ${item.method===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+  <div class="field"><label>Data *</label><input name="date" type="date" required value="${esc(item.date||localISODate())}"></div>
+  <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
+ </div><div class="form-actions"><button type="button" class="secondary" id="cancelForm">Cancelar</button><button class="primary" type="submit">${item.id?'Salvar alterações':'Salvar recarga'}</button></div></form>`;
+ const form=$('creditForm');
+ bindDecimalInput(form.elements.value);bindDecimalInput(form.elements.creditValue);
+ const toggle=()=>{const v=form.elements.creditType.value==='valor';$('creditValueWrap').classList.toggle('hidden',!v);$('creditWashesWrap').classList.toggle('hidden',v);form.elements.washes.required=!v;};
+ form.elements.creditType.addEventListener('change',toggle);toggle();
+ $('cancelForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
+ let clients=[];
+ try{clients=await all('clients');const dl=$('creditClients');if(dl)dl.innerHTML=clients.slice(0,800).map(c=>`<option value="${esc(c.name)}">`).join('');}catch(e){console.error(e);}
+ form.onsubmit=async e=>{
+  e.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;
+  try{
+   const d=Object.fromEntries(new FormData(form).entries());
+   const cl=clients.find(c=>sameClient(c.name,d.client));
+   if(!cl)throw new Error('Escolha um cliente já cadastrado (digite e selecione na lista).');
+   const value=decimalValue(d.value);if(!Number.isFinite(value)||value<=0)throw new Error('Informe o valor pago.');
+   const isWash=d.creditType==='lavagens';
+   const washes=isWash?parseInt(d.washes,10):0;if(isWash&&(!Number.isFinite(washes)||washes<1))throw new Error('Informe a quantidade de lavagens.');
+   let creditValue=value;if(!isWash&&String(d.creditValue||'').trim()!==''){creditValue=decimalValue(d.creditValue);if(!Number.isFinite(creditValue)||creditValue<=0)throw new Error('Valor creditado inválido.');}
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date||''))throw new Error('Informe uma data válida.');
+   const record={...(item.id?item:{}),kind:'credito',creditType:isWash?'lavagens':'valor',client:cl.name,date:d.date,value,method:d.method,status:'Pago',notes:d.notes||'',
+    description:isWash?`Recarga de crédito: pacote de ${washes} lavagem(ns)`:`Recarga de crédito: saldo`};
+   delete record.creditValue;delete record.washes;delete record.fee;delete record.feePercent;
+   if(isWash)record.washes=washes;else record.creditValue=creditValue;
+   Object.assign(record,feeFields(d.method,value,'Pago'));
+   await save('payments',record);
+   $('formWrap').classList.add('hidden');editId=null;showToast('Recarga salva.');
+   creditsOpen.add(normalizeText(cl.name));
+   await renderCreditsPanel();await renderStats();
+  }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
+  finally{btn.disabled=false;}
+ };
+}
+
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
 let financeMonth='', financeKind='all', financeCfgOpen=false;
 const otherIncomeMethods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'];
@@ -2607,12 +2809,12 @@ async function renderFinancePanel(){
   const isPaid=e=>e.paymentStatus==='Pago';
   const isOpen=e=>e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente';
   // Entradas: recebimentos de serviços (vinculados) e outras entradas (lançadas aqui).
-  const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId,type:p.serviceId?'Serviço':'Outra entrada',status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),fee:feeOf(p),raw:p}));
+  const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId&&p.kind!=='credito',type:p.serviceId?'Serviço':(p.kind==='credito'?'Recarga de crédito':'Outra entrada'),status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),fee:feeOf(p),raw:p}));
   // Saídas: despesas pagas no mês (pela data do pagamento) e contas em aberto que vencem no mês.
   const outs=expenses.filter(e=>isPaid(e)?inMonth(e.date||e.paidAt):(isOpen(e)&&inMonth(e.dueDate))).map(e=>({id:e.id,date:isPaid(e)?(e.date||e.paidAt):e.dueDate,dir:'out',other:false,type:'Saída',status:isPaid(e)?'Pago':'Em aberto',description:e.description||'',person:e.supplier||e.category||'',method:e.payment||'',value:Number(e.value||0)}));
   const sum=a=>a.reduce((n,x)=>n+x.value,0);
   const inPaid=ins.filter(x=>x.status==='Pago'), outPaid=outs.filter(x=>x.status==='Pago');
-  const received=sum(inPaid), receivedOther=sum(inPaid.filter(x=>x.other)), receivedServices=received-receivedOther;
+  const received=sum(inPaid), receivedOther=sum(inPaid.filter(x=>x.other)), receivedCredit=sum(inPaid.filter(x=>x.raw&&x.raw.kind==='credito')), receivedServices=received-receivedOther-receivedCredit;
   const feeTotal=inPaid.reduce((n,x)=>n+x.fee,0);
   const extrasMonth=servicesAll.filter(x=>x.status==='Concluído'&&inMonth(x.date)&&Number(x.extrasTotal||0)>0);
   const extrasTotalMonth=extrasMonth.reduce((n,x)=>n+Number(x.extrasTotal||0),0);
@@ -2630,7 +2832,7 @@ const pctText=v=>String(Number(v||0)).replace('.',',');
   const settingsHtml=`<details class="return-editor" ${financeCfgOpen?'open':''}><summary>Taxas de cartão e meta do mês</summary><div class="form-grid" style="margin-top:10px"><div class="field"><label>Taxa Pix (%)</label><input id="feePix" inputmode="decimal" value="${pctText(appSettings.fees['Pix'])}"></div><div class="field"><label>Taxa cartão geral (%)</label><input id="feeCard" inputmode="decimal" value="${pctText(appSettings.fees['Cartão'])}"></div><div class="field"><label>Taxa débito (%)</label><input id="feeDebit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de débito'])}"></div><div class="field"><label>Taxa crédito (%)</label><input id="feeCredit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de crédito'])}"></div><div class="field"><label>Contabilizar taxas a partir de</label><input id="feesSince" type="date" value="${esc(appSettings.feesSince||localISODate())}"></div><div class="field"><label>Meta de faturamento do mês (R$)</label><input id="goalMonthly" inputmode="decimal" value="${appSettings.goal.monthly?decimalText(appSettings.goal.monthly):''}" placeholder="0,00"></div></div><div class="return-actions"><button type="button" class="secondary" id="saveSettingsBtn">Salvar</button></div><p class="muted small">As taxas valem para novos recebimentos (os já registrados mantêm a taxa da época). As configurações ficam salvas na sua conta e valem em todos os aparelhos.</p></details>`;
   $('tableWrap').innerHTML=`<div class="finance-toolbar"><label for="financeMonthInput">Mês</label><input type="month" id="financeMonthInput" value="${key}"><button type="button" class="secondary" id="financeThisMonth">Mês atual</button></div>
    ${settingsHtml}
-   <div class="dashboard-metrics compact" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
+   <div class="dashboard-metrics compact" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)} · Recargas ${money(receivedCredit)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
    <div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>
    <p class="muted small">Movimento de ${esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
    ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}${r.fee>0?' · taxa '+money(r.fee):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
@@ -2745,7 +2947,7 @@ async function renderReturnPanel(){
  }catch(err){$('tableWrap').innerHTML='<div class="empty">Não foi possível carregar os clientes. Verifique a conexão.</div>';console.error(err);}
 }
 
-$('addBtn').onclick=()=>{if(active==='payments'){renderOtherIncomeForm();return;}if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
+$('addBtn').onclick=()=>{if(active==='credits'){renderCreditForm();return;}if(active==='payments'){renderOtherIncomeForm();return;}if(active==='clients'){ $('formWrap').style.display=''; $('formWrap').classList.remove('hidden'); renderClientVehicleForm({}); return;}renderForm();};
 
 $('refreshBtn').onclick=()=>{
  invalidateCache();

@@ -1,3 +1,37 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v24 (sobre a v23; inclui tudo da v23)
+
+SE ALGO DER ERRADO: volte ao ZIP da v23 e avise qual tela falhou.
+
+1) CRÉDITOS DE CLIENTES (nova aba "Créditos", somente dono)
+- Saldo em reais: o cliente paga um valor antecipado e vai consumindo. Se houver bônus (pagou 100, ganhou 110),
+  preencha "Valor creditado".
+- Pacote de lavagens: o cliente paga por uma quantidade (ex.: 5 lavagens por R$ 200) e cada uso desconta 1.
+- "+ Nova recarga" (ou "Recarregar" no cartão do cliente). O cartão mostra saldo, lavagens e o extrato
+  (recargas e usos, com Editar/Excluir nas recargas). Filtros: Com crédito, Negativos, Zerados, Todos.
+- Para consumir: no serviço concluído e recebido, escolha a forma de pagamento "Crédito (saldo)" ou
+  "Crédito (lavagem)". O formulário mostra o crédito do cliente. Se faltar saldo, o app pergunta antes de
+  deixar negativo. Cancelar o serviço devolve o crédito automaticamente.
+- Contabilidade: a recarga entra como dinheiro recebido (Financeiro e Fechamento do dia). O serviço pago com
+  crédito conta como serviço realizado, mas NÃO como novo recebimento (aparece em "Pago com crédito").
+  Recargas não entram como receita do mês (evita contar duas vezes).
+- O funcionário não vê a aba nem as formas de pagamento com crédito.
+- O backup em JSON guarda os créditos. A planilha Excel de exportação/importação não guarda o tipo de crédito.
+
+2) RETOMAR DE ONDE PAROU (app em segundo plano)
+- O sistema do celular pode fechar o aplicativo quando você usa outro app (ex.: conferir um Pix). Agora o app
+  grava a tela, os filtros, a busca e a posição da rolagem, e ao reabrir volta ao mesmo ponto.
+- Se você estava lançando um serviço, o rascunho é guardado e retomado com placa, valores, extras e pagamento.
+  O rascunho é apagado ao salvar, cancelar ou trocar de aba.
+- Ao voltar para o app depois de mais de 45 segundos, os dados da tela são atualizados sozinhos.
+- Sair da conta apaga o que foi guardado. A retomada vale por 8 horas.
+
+3) VERSÃO E ATUALIZAÇÃO
+- O cabeçalho mostra a versão em uso (v24). Quando houver uma nova versão publicada, aparece o aviso
+  "Nova versão disponível — Atualizar agora".
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v24). Não mexa no config.js.
+
+--- v23 ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v23 (sobre a v22; inclui tudo da v22)
 
 SE ALGO DER ERRADO: volte ao ZIP da v22 (ou v21) e avise qual tela falhou.

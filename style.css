@@ -131,3 +131,10 @@ body.role-funcionario [data-delete],body.role-funcionario [data-deleteclient],bo
 .dup-bar{margin:0 0 12px}
 .dup-member{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}
 .dup-member input{margin-top:4px}
+
+#updateBanner{position:fixed;left:12px;right:12px;bottom:12px;z-index:50;display:flex;gap:10px;align-items:center;justify-content:space-between;background:#1f7a3d;color:#fff;border-radius:14px;padding:12px 14px;font-weight:650;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+#updateBanner button{background:#fff;color:#14532d;border:0;border-radius:10px;padding:9px 14px;font-weight:800}
+.credit-balances{display:flex;gap:22px;margin:4px 0}
+.credit-balances strong{display:block;font-size:20px}
+.credit-moves{margin-top:6px;border-top:1px solid var(--line);padding-top:6px;display:grid;gap:6px}
+.credit-move{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px}
