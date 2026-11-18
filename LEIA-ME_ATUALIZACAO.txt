@@ -1,4 +1,22 @@
-AUTO BRILHO WEB — ATUALIZAÇÃO v25 (sobre a v24; inclui tudo da v24)
+AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v25)
+
+CORREÇÕES DA IMPORTAÇÃO EXCEL
+- Reconhece também os nomes das abas e cabeçalhos produzidos pela própria exportação do aplicativo
+  (Serviços, Pagamentos, Valor, Data pagamento, Vencimento, Forma, etc.).
+- Lê valores numéricos reais do Excel e interpreta formatos brasileiros como R$ 1.234,56,
+  1.234,56 e 1234.56.
+- Não importa linhas de despesas com valor ausente ou inválido; elas aparecem no aviso de conferência.
+- Na reimportação, encontra despesas correspondentes mesmo que o valor antigo esteja zerado e atualiza
+  esse valor, em vez de ignorar a linha como duplicada.
+- Mantém registros que já têm valor diferente de zero e evita atualizar uma despesa apenas porque
+  ela ocupa a mesma posição/linha de outra planilha.
+- Atualiza o cache do aplicativo para v26.
+
+IMPORTANTE: a importação não apaga nem substitui todos os registros. Ela adiciona registros novos,
+ignora duplicados e corrige despesas correspondentes cujo valor esteja zerado. Faça backup e confira
+a prévia e os avisos antes de confirmar.
+
+AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v24; inclui tudo da v24)
 
 SE ALGO DER ERRADO: volte ao ZIP da v24 e avise qual tela falhou.
 

@@ -23,11 +23,15 @@ const configured=()=>window.AUTO_BRILHO_CONFIG && /^https:\/\//.test(window.AUTO
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function decimalValue(v){
- let s=String(v??'').trim().replace(/R\$/gi,'').replace(/\s/g,'');
+ if(typeof v==='number')return Number.isFinite(v)?Math.round(v*100)/100:NaN;
+ let s=String(v??'').trim().replace(/R\$/gi,'').replace(/[\s\u00a0]/g,'').replace(/[−–]/g,'-');
  if(!s)return 0;
- if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
+ const negative=/^\(.*\)$/.test(s);if(negative)s=s.slice(1,-1);
+ s=s.replace(/[^0-9,.-]/g,'');
+ if(s.includes(',')&&s.includes('.'))s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
  else if(s.includes(','))s=s.replace(',','.');
- const n=Number(s);
+ else if((s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'');
+ const n=Number(s)*(negative?-1:1);
  return Number.isFinite(n)?Math.round(n*100)/100:NaN;
 }
 function decimalText(v){return Number(v||0).toFixed(2)}
@@ -2180,14 +2184,31 @@ function excelDate(v){
  return '';
 }
 const IMPORT_MAX_ROWS_PER_SHEET=10000, IMPORT_MAX_ROWS_TOTAL=25000;
-const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data de vencimento'];
+const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data do pagamento','Data de vencimento','Vencimento'];
+const IMPORT_NUMERIC_COLUMNS=['Valor (R$)','Valor'];
+function importHeaderKey(v){return normalizeText(String(v||'')).replace(/[^a-z0-9]/g,'');}
+const IMPORT_HEADER_ALIASES={
+ 'nome':'Nome completo','telefone':'Telefone / WhatsApp','cpfcnpj':'CPF / CNPJ',
+ 'veiculoplaca':'Veículo / placa','servico':'Serviço executado','pagamento':'Situação financeira',
+ 'forma':'Forma de pagamento','datapagamento':'Data do pagamento','vencimento':'Data de vencimento',
+ 'valor':'Valor (R$)','situacao':'Situação','fornecedor':'Fornecedor',
+ 'tipo':'Tipo de veículo','veiculo':'Veículo / placa'
+};
 function rowObjects(ws){
  const shown=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
  let raw=[];try{raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});}catch(e){}
- // Colunas de data são lidas pelo valor real da célula (número de série do Excel) e não pelo texto exibido,
- // que depende do formato da célula (mm/dd/aa x dd/mm/aaaa) e trocava o dia com o mês.
  const byRow=new Map();raw.forEach(r=>{if(r&&r.__rowNum__!=null)byRow.set(r.__rowNum__,r);});
- shown.forEach((row,i)=>{const r=(row.__rowNum__!=null&&byRow.get(row.__rowNum__))||raw[i];if(!r)return;IMPORT_DATE_COLUMNS.forEach(c=>{if(c in row&&typeof r[c]==='number')row[c]=r[c];});});
+ shown.forEach((row,i)=>{
+  const r=(row.__rowNum__!=null&&byRow.get(row.__rowNum__))||raw[i];if(!r)return;
+  for(const [key,value] of Object.entries(row)){
+   const normalized=importHeaderKey(key),alias=IMPORT_HEADER_ALIASES[normalized];
+   if(alias&&!Object.prototype.hasOwnProperty.call(row,alias))row[alias]=value;
+   if(normalized==='servico'&&!Object.prototype.hasOwnProperty.call(row,'Serviço solicitado'))row['Serviço solicitado']=value;
+   if(normalized==='veiculo'&&!Object.prototype.hasOwnProperty.call(row,'Veículo'))row['Veículo']=value;
+  }
+  IMPORT_DATE_COLUMNS.forEach(c=>{if(c in row&&typeof r[c]==='number')row[c]=r[c];});
+  IMPORT_NUMERIC_COLUMNS.forEach(c=>{if(c in row&&typeof r[c]==='number')row[c]=r[c];});
+ });
  return shown;
 }
 const importRowNumber=r=>r&&r.__rowNum__!=null?r.__rowNum__+1:'?';
@@ -2195,9 +2216,11 @@ async function stageExcelFile(file){
  if(!window.XLSX)throw new Error('Leitor Excel indisponível.');
  const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:false});
  let totalRows=0;const warnings=[];
+ const SHEET_ALIASES={'Serviços realizados':['Serviços realizados','Serviços'],'Receitas e pagamentos':['Receitas e pagamentos','Pagamentos'],'Clientes':['Clientes'],'Veículos':['Veículos'],'Despesas':['Despesas'],'Contas a pagar':['Contas a pagar'],'Agendamentos':['Agendamentos']};
  const get=n=>{
-  if(!wb.Sheets[n])return [];
-  const rows=rowObjects(wb.Sheets[n]);
+  const sheetName=(SHEET_ALIASES[n]||[n]).find(name=>wb.Sheets[name]);
+  if(!sheetName)return [];
+  const rows=rowObjects(wb.Sheets[sheetName]);
   if(rows.length>IMPORT_MAX_ROWS_PER_SHEET)throw new Error(`A aba “${n}” tem ${rows.length.toLocaleString('pt-BR')} linhas e o limite é ${IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('pt-BR')} por aba. Divida a planilha em partes menores.`);
   totalRows+=rows.length;
   if(totalRows>IMPORT_MAX_ROWS_TOTAL)throw new Error(`A planilha passa do limite de ${IMPORT_MAX_ROWS_TOTAL.toLocaleString('pt-BR')} linhas no total. Divida a planilha em partes menores.`);
@@ -2230,11 +2253,14 @@ warnDates('Serviços realizados',services.filter(s=>!s.date).map(s=>s._row));
   const status=normalizeText(r['Situação']);
   const due=excelDate(r['Data de vencimento']);
   const rowNo=importRowNumber(r);
-  const expenseObj={importKey:'excel-expense-'+i,date:excelDate(r['Data do pagamento']),dueDate:due==='3000-01-01'?'':due,category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(r['Valor (R$)']),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
+  const rawExpenseValue=r['Valor (R$)'];
+  const expenseObj={importKey:'excel-expense-'+i,_row:rowNo,_valueProvided:rawExpenseValue!==''&&rawExpenseValue!==null&&rawExpenseValue!==undefined,date:excelDate(r['Data do pagamento']),dueDate:due==='3000-01-01'?'':due,category,subcategory:String(r['Subcategoria']||'').trim(),description:String(r['Descrição']).trim(),supplier:String(r['Fornecedor']||'').trim(),value:decimalValue(rawExpenseValue),payment:String(r['Forma de pagamento']||'').trim(),paymentStatus:['pago','paga','quitado','quitada','liquidado','liquidada'].includes(status)?'Pago':'Em aberto',notes:String(r['Observações']||'').trim()};
   if(expenseObj.paymentStatus==='Pago'&&!expenseObj.date){badExpenseDates.push(rowNo);return null;}
   return expenseObj;
  }).filter(Boolean);
  warnDates('Despesas / Contas a pagar (pagas)',badExpenseDates);
+ const invalidExpenseValues=expenses.filter(e=>!e._valueProvided||!Number.isFinite(e.value)).map(e=>e._row);
+ if(invalidExpenseValues.length)warnings.push(`${invalidExpenseValues.length} linha(s) de “Despesas / Contas a pagar” sem valor numérico válido não serão importadas (linhas: ${invalidExpenseValues.slice(0,12).join(', ')}${invalidExpenseValues.length>12?'…':''}).`);
  const appointmentRows=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim());
  warnDates('Agendamentos',appointmentRows.filter(r=>!excelDate(r['Data'])).map(importRowNumber));
  const appointments=appointmentRows.filter(r=>excelDate(r['Data'])).filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
@@ -2249,7 +2275,7 @@ async function importStagedExcel(){
  if(!stagedExcelImport)return;const btn=$('confirmExcelImport');btn.disabled=true;btn.textContent='Importando...';
  try{
   await downloadPreImportBackup();
-  const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,appointments:0,duplicates:0,invalidServices:0};
+  const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,updatedExpenses:0,appointments:0,duplicates:0,invalidServices:0};
   let currentClients=await all('clients'),currentVehicles=await all('vehicles'),currentServices=await all('services'),currentPayments=await all('payments'),currentExpenses=await all('expenses'),currentAppointments=await all('appointments');
   const clientMap=new Map();
   let prog=0;const progress=(label,done,total)=>{if(done%20===0||done===total){btn.textContent=`Importando ${label} ${done}/${total}...`;}};
@@ -2273,9 +2299,28 @@ async function importStagedExcel(){
    const payment={serviceId:service.id,date:service.date,client:service.client||'Não identificado',description:`Serviço ${service.service||''} - ${service.vehicle||''}`,method:method||'Outro',value:Number(service.value||0),status:method==='Brinde'?'Brinde':'Pago',notes:service.notes||''};
    const saved=await save('payments',payment);currentPayments.push(saved);counts.payments++;
   }
-  prog=0;for(const e of data.expenses){progress('despesas',++prog,data.expenses.length);if(!Number.isFinite(e.value)){counts.duplicates++;continue;}const exists=currentExpenses.find(x=>x.importKey===e.importKey||(!x.importKey&&x.date===e.date&&x.dueDate===e.dueDate&&sameClient(x.description,e.description)&&Math.abs(Number(x.value||0)-e.value)<0.01&&(canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category))));if(exists){const normalizedCategory=canonicalExpenseCategory(exists.category);const cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate; if(normalizedCategory!==exists.category||cleanDue!==exists.dueDate){const updated=await save('expenses',{...exists,category:normalizedCategory,dueDate:cleanDue});currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);}counts.duplicates++;continue;}const saved=await save('expenses',{...e,category:canonicalExpenseCategory(e.category)});currentExpenses.push(saved);counts.expenses++;}
+  prog=0;for(const e of data.expenses){
+   progress('despesas',++prog,data.expenses.length);
+   if(!e._valueProvided||!Number.isFinite(e.value)){counts.duplicates++;continue;}
+   const sameExpense=x=>x.date===e.date&&x.dueDate===e.dueDate&&normalizeText(x.description)===normalizeText(e.description)&&canonicalExpenseCategory(x.category)===canonicalExpenseCategory(e.category)&&(!x.supplier||!e.supplier||normalizeText(x.supplier)===normalizeText(e.supplier))&&(Math.abs(Number(x.value||0)-e.value)<0.01||Number(x.value||0)===0);
+   const exists=currentExpenses.find(sameExpense);
+   if(exists){
+    const normalizedCategory=canonicalExpenseCategory(exists.category),cleanDue=exists.dueDate==='3000-01-01'?'':exists.dueDate;
+    const patch={...exists,category:normalizedCategory,dueDate:cleanDue};
+    let changed=normalizedCategory!==exists.category||cleanDue!==exists.dueDate;
+    if((Number(exists.value||0)===0||!Number.isFinite(Number(exists.value)))&&e.value>0){patch.value=e.value;changed=true;}
+    if(!exists.date&&e.date){patch.date=e.date;changed=true;}
+    if(!exists.dueDate&&e.dueDate){patch.dueDate=e.dueDate;changed=true;}
+    if(changed){const updated=await save('expenses',patch);currentExpenses=currentExpenses.map(x=>x.id===updated.id?updated:x);counts.updatedExpenses++;}
+    else counts.duplicates++;
+    continue;
+   }
+   const {_row,_valueProvided,...expenseData}=e;
+   const saved=await save('expenses',{...expenseData,category:canonicalExpenseCategory(e.category)});
+   currentExpenses.push(saved);counts.expenses++;
+  }
   for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
-  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
+  stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas novas e ${counts.updatedExpenses} despesas atualizadas. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
 
