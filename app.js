@@ -2188,11 +2188,21 @@ const IMPORT_DATE_COLUMNS=['Data','Data de cadastro','Data do pagamento','Data d
 const IMPORT_NUMERIC_COLUMNS=['Valor (R$)','Valor'];
 function importHeaderKey(v){return normalizeText(String(v||'')).replace(/[^a-z0-9]/g,'');}
 const IMPORT_HEADER_ALIASES={
- 'nome':'Nome completo','telefone':'Telefone / WhatsApp','cpfcnpj':'CPF / CNPJ',
- 'veiculoplaca':'Veículo / placa','servico':'Serviço executado','pagamento':'Situação financeira',
- 'forma':'Forma de pagamento','datapagamento':'Data do pagamento','vencimento':'Data de vencimento',
- 'valor':'Valor (R$)','situacao':'Situação','fornecedor':'Fornecedor',
- 'tipo':'Tipo de veículo','veiculo':'Veículo / placa'
+ 'nome':'Nome completo','nomecompleto':'Nome completo',
+ 'telefone':'Telefone / WhatsApp','telefonewhatsapp':'Telefone / WhatsApp','whatsapp':'Telefone / WhatsApp',
+ 'email':'E-mail','cpfcnpj':'CPF / CNPJ','documento':'CPF / CNPJ',
+ 'endereco':'Endereço','datadecadastro':'Data de cadastro',
+ 'veiculoplaca':'Veículo / placa','placa':'Placa',
+ 'servico':'Serviço executado','servicoexecutado':'Serviço executado',
+ 'pagamento':'Situação financeira','situacaofinanceira':'Situação financeira',
+ 'forma':'Forma de pagamento','formadepagamento':'Forma de pagamento',
+ 'datapagamento':'Data do pagamento','datadopagamento':'Data do pagamento',
+ 'vencimento':'Data de vencimento','datavencimento':'Data de vencimento','datadevencimento':'Data de vencimento',
+ 'valor':'Valor (R$)','valorr':'Valor (R$)','valorbrl':'Valor (R$)',
+ 'situacao':'Situação','fornecedor':'Fornecedor','tipo':'Tipo de veículo',
+ 'veiculo':'Veículo / placa','marca':'Marca','modelo':'Modelo','cor':'Cor',
+ 'horario':'Horário','observacoes':'Observações','descricao':'Descrição',
+ 'categoria':'Categoria','subcategoria':'Subcategoria','cliente':'Cliente','data':'Data'
 };
 function rowObjects(ws){
  const shown=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
@@ -2204,6 +2214,8 @@ function rowObjects(ws){
    const normalized=importHeaderKey(key),alias=IMPORT_HEADER_ALIASES[normalized];
    if(alias&&!Object.prototype.hasOwnProperty.call(row,alias))row[alias]=value;
    if(normalized==='servico'&&!Object.prototype.hasOwnProperty.call(row,'Serviço solicitado'))row['Serviço solicitado']=value;
+   // A exportação antiga usava “Forma” tanto em serviços quanto em pagamentos.
+   if(normalized==='forma'&&!Object.prototype.hasOwnProperty.call(row,'Tipo de pagamento'))row['Tipo de pagamento']=value;
    if(normalized==='veiculo'&&!Object.prototype.hasOwnProperty.call(row,'Veículo'))row['Veículo']=value;
   }
   IMPORT_DATE_COLUMNS.forEach(c=>{if(c in row&&typeof r[c]==='number')row[c]=r[c];});
@@ -2216,7 +2228,8 @@ async function stageExcelFile(file){
  if(!window.XLSX)throw new Error('Leitor Excel indisponível.');
  const buf=await file.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:false});
  let totalRows=0;const warnings=[];
- const SHEET_ALIASES={'Serviços realizados':['Serviços realizados','Serviços'],'Receitas e pagamentos':['Receitas e pagamentos','Pagamentos'],'Clientes':['Clientes'],'Veículos':['Veículos'],'Despesas':['Despesas'],'Contas a pagar':['Contas a pagar'],'Agendamentos':['Agendamentos']};
+ if((wb.SheetNames||[]).some(n=>importHeaderKey(n)==='agendamentos'))warnings.push('A aba legada “Agendamentos” foi identificada, mas não será importada porque essa funcionalidade não faz mais parte do modelo atual.');
+ const SHEET_ALIASES={'Serviços realizados':['Serviços realizados','Serviços'],'Receitas e pagamentos':['Receitas e pagamentos','Pagamentos'],'Clientes':['Clientes'],'Veículos':['Veículos'],'Despesas':['Despesas'],'Contas a pagar':['Contas a pagar']};
  const get=n=>{
   const sheetName=(SHEET_ALIASES[n]||[n]).find(name=>wb.Sheets[name]);
   if(!sheetName)return [];
@@ -2261,10 +2274,8 @@ warnDates('Serviços realizados',services.filter(s=>!s.date).map(s=>s._row));
  warnDates('Despesas / Contas a pagar (pagas)',badExpenseDates);
  const invalidExpenseValues=expenses.filter(e=>!e._valueProvided||!Number.isFinite(e.value)).map(e=>e._row);
  if(invalidExpenseValues.length)warnings.push(`${invalidExpenseValues.length} linha(s) de “Despesas / Contas a pagar” sem valor numérico válido não serão importadas (linhas: ${invalidExpenseValues.slice(0,12).join(', ')}${invalidExpenseValues.length>12?'…':''}).`);
- const appointmentRows=get('Agendamentos').filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim());
- warnDates('Agendamentos',appointmentRows.filter(r=>!excelDate(r['Data'])).map(importRowNumber));
- const appointments=appointmentRows.filter(r=>excelDate(r['Data'])).filter(r=>String(r['Data']||'').trim()&&String(r['Cliente']||'').trim()).map(r=>({date:excelDate(r['Data']),time:String(r['Horário']||'').trim(),client:String(r['Cliente']).trim(),vehicle:String(r['Veículo / placa']||'SEM PLACA').trim(),service:String(r['Serviço solicitado']||'').trim(),value:decimalValue(r['Valor (R$)']),status:String(r['Situação']||'Agendado').trim(),notes:String(r['Observações']||'').trim()}));
- return {clients,vehicles,services,payments,expenses,appointments,warnings,totalRows};
+ // A aba legada “Agendamentos” é ignorada: esse módulo não faz mais parte da planilha atual.
+ return {clients,vehicles,services,payments,expenses,warnings,totalRows};
 }
 function serviceKey(s){return [s.date,normalizeText(s.client),normalizePlate(s.vehicle),normalizeText(s.service),Number(s.value||0).toFixed(2)].join('|');}
 function sameImportedService(a,b){return a.date===b.date&&normalizePlate(a.vehicle)===normalizePlate(b.vehicle)&&normalizeText(a.service)===normalizeText(b.service)&&Math.abs(Number(a.value||0)-Number(b.value||0))<0.01&&(!a.client||!b.client||normalizeText(a.client)==='nao identificado'||normalizeText(b.client)==='nao identificado'||sameClient(a.client,b.client));}
@@ -2275,8 +2286,8 @@ async function importStagedExcel(){
  if(!stagedExcelImport)return;const btn=$('confirmExcelImport');btn.disabled=true;btn.textContent='Importando...';
  try{
   await downloadPreImportBackup();
-  const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,updatedExpenses:0,appointments:0,duplicates:0,invalidServices:0};
-  let currentClients=await all('clients'),currentVehicles=await all('vehicles'),currentServices=await all('services'),currentPayments=await all('payments'),currentExpenses=await all('expenses'),currentAppointments=await all('appointments');
+  const data=stagedExcelImport;let counts={clients:0,vehicles:0,services:0,payments:0,expenses:0,updatedExpenses:0,duplicates:0,invalidServices:0};
+  let currentClients=await all('clients'),currentVehicles=await all('vehicles'),currentServices=await all('services'),currentPayments=await all('payments'),currentExpenses=await all('expenses');
   const clientMap=new Map();
   let prog=0;const progress=(label,done,total)=>{if(done%20===0||done===total){btn.textContent=`Importando ${label} ${done}/${total}...`;}};
   for(const c of data.clients){progress('clientes',++prog,data.clients.length);let found=currentClients.find(x=>x.importKey===c.importKey)||(c.document&&currentClients.find(x=>String(x.document||'').replace(/\D/g,'')===c.document.replace(/\D/g,'')))||(c.phone&&currentClients.find(x=>String(x.phone||'').replace(/\D/g,'')===c.phone.replace(/\D/g,'')))||(!c.phone&&!c.document&&currentClients.find(x=>sameClient(x.name,c.name)&&!x.importKey));if(found){if(!found.registrationDate&&c.registrationDate){found=await save('clients',{...found,registrationDate:c.registrationDate});currentClients=currentClients.map(x=>x.id===found.id?found:x);}clientMap.set(normalizeText(c.name),found);counts.duplicates++;}else{const saved=await save('clients',c);currentClients.push(saved);clientMap.set(normalizeText(c.name),saved);counts.clients++;}}
@@ -2319,7 +2330,6 @@ async function importStagedExcel(){
    const saved=await save('expenses',{...expenseData,category:canonicalExpenseCategory(e.category)});
    currentExpenses.push(saved);counts.expenses++;
   }
-  for(const a of data.appointments){const exists=currentAppointments.some(x=>x.date===a.date&&x.time===a.time&&sameClient(x.client,a.client)&&normalizePlate(x.vehicle)===normalizePlate(a.vehicle));if(exists){counts.duplicates++;continue;}const saved=await save('appointments',a);currentAppointments.push(saved);counts.appointments++;}
   stagedExcelImport=null;$('importPreview').classList.add('hidden');$('importExcelFile').value='';const unidentified=data.services.filter(s=>normalizeText(s.client)==='nao identificado').length;const resultText=`Importação concluída: ${counts.clients} clientes, ${counts.vehicles} veículos, ${counts.services} serviços, ${counts.payments} pagamentos e ${counts.expenses} despesas novas e ${counts.updatedExpenses} despesas atualizadas. ${unidentified} serviço(s) ficaram com cliente “Não identificado”; ${counts.duplicates} duplicado(s) ignorado(s) e ${counts.invalidServices} serviço(s) inválido(s) não importado(s).`;$('exportStatus').textContent=resultText;showToast(counts.services?`${counts.services} serviço(s) gravado(s) com sucesso.`:'Nenhum serviço novo foi gravado. Confira o resumo da importação.');await renderStats();await renderFinancialMovement();if(counts.services>0){active='services';renderTabs();renderSection();} 
  }catch(err){showToast('Falha na importação: '+err.message);console.error(err);}finally{if($('confirmExcelImport')){$('confirmExcelImport').disabled=false;$('confirmExcelImport').textContent='Confirmar importação';}}
 }
@@ -2334,8 +2344,7 @@ function downloadImportTemplate(){
   ['Serviços realizados',['Data','Cliente','Veículo / placa','Serviço executado','Valor (R$)','Situação','Situação financeira','Tipo de pagamento','Observações']],
   ['Receitas e pagamentos',['Data','Cliente','Descrição','Forma de pagamento','Valor (R$)','Situação','Observações']],
   ['Despesas',['Data do pagamento','Data de vencimento','Categoria','Subcategoria','Descrição','Fornecedor','Valor (R$)','Forma de pagamento','Situação','Observações']],
-  ['Contas a pagar',['Data do pagamento','Data de vencimento','Categoria','Subcategoria','Descrição','Fornecedor','Valor (R$)','Forma de pagamento','Situação','Observações']],
-  ['Agendamentos',['Data','Horário','Cliente','Veículo / placa','Serviço solicitado','Valor (R$)','Situação','Observações']]
+  ['Contas a pagar',['Data do pagamento','Data de vencimento','Categoria','Subcategoria','Descrição','Fornecedor','Valor (R$)','Forma de pagamento','Situação','Observações']]
  ];
  for(const [name,headers] of sheets){
   const ws=XLSX.utils.aoa_to_sheet([headers]);
@@ -2346,17 +2355,35 @@ function downloadImportTemplate(){
  showToast('Planilha-modelo de importação baixada.');
 }
 
-async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;const limitNote=$('importLimitNote');if(limitNote)limitNote.textContent=`Limite de importação: até ${IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('pt-BR')} linhas por aba e ${IMPORT_MAX_ROWS_TOTAL.toLocaleString('pt-BR')} no total (a linha do cabeçalho não conta). O Excel em si aceita até 1.048.576 linhas (.xlsx) ou 65.536 (.xls), mas o aplicativo grava linha a linha na nuvem; acima de 2.000 linhas a importação pode levar vários minutos, então mantenha a tela aberta. Use datas em dd/mm/aaaa ou células de data do Excel.`;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços (incluindo ${d.services.filter(s=>normalizeText(s.client)==='nao identificado').length} sem vínculo automático, que serão preservados como “Não identificado”)</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li><li>${d.appointments.length} agendamentos</li></ul>${(d.warnings&&d.warnings.length)?`<div class="alert-panel"><strong>Atenção: confira antes de confirmar</strong>${d.warnings.map(w=>`<p>${esc(w)}</p>`).join('')}</div>`:''}<p class="muted small">Linhas lidas na planilha: ${Number(d.totalRows||0).toLocaleString('pt-BR')}.</p><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
+async function setupExcelImport(){const input=$('importExcelFile');if(!input)return;const limitNote=$('importLimitNote');if(limitNote)limitNote.textContent=`Limite de importação: até ${IMPORT_MAX_ROWS_PER_SHEET.toLocaleString('pt-BR')} linhas por aba e ${IMPORT_MAX_ROWS_TOTAL.toLocaleString('pt-BR')} no total (a linha do cabeçalho não conta). O Excel em si aceita até 1.048.576 linhas (.xlsx) ou 65.536 (.xls), mas o aplicativo grava linha a linha na nuvem; acima de 2.000 linhas a importação pode levar vários minutos, então mantenha a tela aberta. Use datas em dd/mm/aaaa ou células de data do Excel.`;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{stagedExcelImport=await stageExcelFile(file);const d=stagedExcelImport;const preview=$('importPreview');preview.innerHTML=`<h3>Conferência antes de importar</h3><p>Arquivo: ${esc(file.name)}</p><ul><li>${d.clients.length} cadastros de clientes (incluindo nomes repetidos para conferência)</li><li>${d.vehicles.length} veículos</li><li>${d.services.length} serviços (incluindo ${d.services.filter(s=>normalizeText(s.client)==='nao identificado').length} sem vínculo automático, que serão preservados como “Não identificado”)</li><li>${d.payments.length} movimentos de recebimento para conciliação com os serviços</li><li>${d.expenses.length} despesas / contas a pagar</li></ul>${(d.warnings&&d.warnings.length)?`<div class="alert-panel"><strong>Atenção: confira antes de confirmar</strong>${d.warnings.map(w=>`<p>${esc(w)}</p>`).join('')}</div>`:''}<p class="muted small">Linhas lidas na planilha: ${Number(d.totalRows||0).toLocaleString('pt-BR')}.</p><p class="muted">O sistema compara os registros existentes antes de gravar. Pagamentos vinculados a serviços serão conciliados para evitar duplicidade. Faça backup antes de confirmar.</p><button class="primary wide" id="confirmExcelImport" type="button">Confirmar importação</button><button class="secondary wide" id="cancelExcelImport" type="button">Cancelar</button>`;preview.classList.remove('hidden');$('confirmExcelImport').onclick=importStagedExcel;$('cancelExcelImport').onclick=()=>{stagedExcelImport=null;preview.classList.add('hidden');input.value='';};}catch(err){showToast('Não foi possível ler a planilha: '+err.message);console.error(err);}};}
 
 async function exportExcel(){
  const status=$('exportStatus');status.textContent='Preparando relatórios...';
- try{const wb=XLSX.utils.book_new();const [clients,vehicles,services,appointments,payments,expenses]=await Promise.all(['clients','vehicles','services','appointments','payments','expenses'].map(all));
-  const sheets=[['Clientes',clients,[['name','Nome'],['phone','Telefone'],['registrationDate','Data de cadastro'],['document','CPF/CNPJ'],['address','Endereço']]],['Veículos',vehicles,[['client','Cliente'],['plate','Placa'],['type','Tipo'],['brand','Marca'],['model','Modelo'],['color','Cor']]],['Serviços',services,[['date','Data'],['client','Cliente'],['vehicle','Veículo/placa'],['service','Serviço'],['value','Valor'],['status','Situação'],['paymentStatus','Pagamento'],['paymentMethod','Forma']]],['Agendamentos',appointments,[['date','Data'],['time','Horário'],['client','Cliente'],['vehicle','Veículo'],['service','Serviço'],['value','Valor'],['status','Situação']]],['Pagamentos',payments,[['date','Data'],['client','Cliente'],['description','Descrição'],['method','Forma'],['value','Valor'],['status','Situação']]],['Despesas',expenses,[['date','Data pagamento'],['dueDate','Vencimento'],['category','Categoria'],['subcategory','Subcategoria'],['description','Descrição'],['supplier','Fornecedor'],['value','Valor'],['payment','Forma'],['paymentStatus','Situação']]]];
-  for(const [name,rows,cols] of sheets){const data=rows.map(r=>Object.fromEntries(cols.map(([k,l])=>[l,(k==='date'||k==='dueDate')?dateBR(r[k]):r[k]??''])));const ws=XLSX.utils.json_to_sheet(data);XLSX.utils.book_append_sheet(wb,ws,name);}
-  const movementRaw=[...payments.filter(p=>p.status!=='Estornado').map(p=>({iso:p.date,Data:dateBR(p.date),Tipo:'Entrada',Situação:p.status,Descrição:p.description,Cliente:p.client,Valor:Number(p.value||0)})),...expenses.map(e=>{const iso=e.paymentStatus==='Pago'?(e.date||e.paidAt):(e.dueDate||e.date);return {iso,Data:dateBR(iso),Tipo:'Saída',Situação:e.paymentStatus,Descrição:e.description,Fornecedor:e.supplier||e.category,Valor:Number(e.value||0)};})].sort((a,b)=>String(b.iso).localeCompare(String(a.iso)));const movement=movementRaw.map(({iso,...r})=>r);XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(movement),'Movimento financeiro');
-  const openPayables=expenses.filter(e=>['Em aberto','Pendente'].includes(e.paymentStatus)).map(e=>({Vencimento:dateBR(e.dueDate||e.date),Categoria:e.category,Subcategoria:e.subcategory,Descrição:e.description,Fornecedor:e.supplier,Valor:Number(e.value||0),Situação:e.paymentStatus}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(openPayables),'Contas a pagar');
-  XLSX.writeFile(wb,`Auto_Brilho_Relatorios_${localISODate()}.xlsx`);status.textContent='Relatórios gerados com movimento financeiro unificado.';showToast('Excel exportado.');
- }catch(e){status.textContent='Falha ao gerar relatório: '+e.message;}
+ try{
+  const wb=XLSX.utils.book_new();
+  const [clients,vehicles,services,payments,expenses]=await Promise.all(['clients','vehicles','services','payments','expenses'].map(all));
+  // Cabeçalhos padronizados: os mesmos nomes, ordem e campos do modelo de importação.
+  const specs=[
+   ['Clientes',clients,r=>({'Nome completo':r.name||'','Telefone / WhatsApp':r.phone||'','Data de cadastro':dateBR(r.registrationDate),'E-mail':r.email||'','CPF / CNPJ':r.document||'','Endereço':r.address||'','Observações':r.notes||''})],
+   ['Veículos',vehicles,r=>({'Cliente':r.client||'','Placa':r.plate||'','Tipo de veículo':r.type||'','Marca':r.brand||'','Modelo':r.model||'','Cor':r.color||'','Observações':r.notes||''})],
+   ['Serviços realizados',services,r=>({'Data':dateBR(r.date),'Cliente':r.client||'','Veículo / placa':r.vehicle||'','Serviço executado':r.service||'','Valor (R$)':Number(r.value||0),'Situação':r.status||'','Situação financeira':r.paymentStatus||'','Tipo de pagamento':r.paymentMethod||'','Observações':r.notes||''})],
+   ['Receitas e pagamentos',payments,r=>({'Data':dateBR(r.date),'Cliente':r.client||'','Descrição':r.description||'','Forma de pagamento':r.method||'','Valor (R$)':Number(r.value||0),'Situação':r.status||'','Observações':r.notes||''})],
+   ['Despesas',expenses,r=>({'Data do pagamento':dateBR(r.date||r.paidAt),'Data de vencimento':dateBR(r.dueDate),'Categoria':canonicalExpenseCategory(r.category),'Subcategoria':r.subcategory||'','Descrição':r.description||'','Fornecedor':r.supplier||'','Valor (R$)':Number(r.value||0),'Forma de pagamento':r.payment||'','Situação':r.paymentStatus||'','Observações':r.notes||''})]
+  ];
+  for(const [name,rows,map] of specs){
+   const data=rows.map(map);
+   const headers=Object.keys(map({}));
+   const ws=XLSX.utils.aoa_to_sheet([headers,...data.map(row=>headers.map(h=>row[h]??''))]);
+   XLSX.utils.book_append_sheet(wb,ws,name);
+  }
+  const openPayables=expenses.filter(e=>['Em aberto','Pendente'].includes(e.paymentStatus)).map(r=>({'Data do pagamento':dateBR(r.date||r.paidAt),'Data de vencimento':dateBR(r.dueDate),'Categoria':canonicalExpenseCategory(r.category),'Subcategoria':r.subcategory||'','Descrição':r.description||'','Fornecedor':r.supplier||'','Valor (R$)':Number(r.value||0),'Forma de pagamento':r.payment||'','Situação':r.paymentStatus||'','Observações':r.notes||''}));
+  const payableHeaders=Object.keys({'Data do pagamento':'','Data de vencimento':'','Categoria':'','Subcategoria':'','Descrição':'','Fornecedor':'','Valor (R$)':'','Forma de pagamento':'','Situação':'','Observações':''});
+  const wsPay=XLSX.utils.aoa_to_sheet([payableHeaders,...openPayables.map(row=>payableHeaders.map(h=>row[h]??''))]);
+  XLSX.utils.book_append_sheet(wb,wsPay,'Contas a pagar');
+  XLSX.writeFile(wb,`Auto_Brilho_Relatorios_${localISODate()}.xlsx`);
+  status.textContent='Relatórios exportados com cabeçalhos compatíveis com o modelo de importação.';
+  showToast('Excel exportado com padrão de importação.');
+ }catch(e){status.textContent='Falha ao gerar relatório: '+e.message;showToast('Falha ao exportar: '+e.message);}
 }
 
 // Inicialização da aba Relatórios e lembretes de vencimento.
