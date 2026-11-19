@@ -236,7 +236,15 @@ function renderExpenseForm(item={},isPayable=false){
    <div class="field"><label>Descrição *</label><input name="description" required value="${esc(item.description||'')}" placeholder="Descrição da conta ou despesa"></div>
    <div class="field"><label>Fornecedor / beneficiário</label><input name="supplier" value="${esc(item.supplier||'')}"></div>
    <div class="field"><label>Valor (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(item.value!==undefined?decimalText(item.value):'')}" placeholder="0,00"></div>
-   ${isPayable?`<div class="field"><label>Data de vencimento *</label><input name="dueDate" type="date" required value="${esc(dueDate)}"></div>`:`<div class="field"><label>Data do pagamento *</label><input name="date" type="date" required value="${esc(item.date||today)}"></div>`}
+   ${isPayable?`<div class="field"><label>Data de vencimento *</label><input name="dueDate" type="date" required value="${esc(dueDate)}"></div>
+    ${!item.id?`<div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px">
+     <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="recurring" id="payableRecurring" value="yes"> Repetir esta conta (boletos sequenciais)</label>
+     <div id="recurrenceOptions" class="form-grid hidden" style="margin-top:10px">
+      <div class="field"><label>Quantidade de boletos *</label><input name="recurrenceCount" type="number" min="2" max="60" value="12"></div>
+      <div class="field"><label>Intervalo</label><select name="recurrenceMonths"><option value="1">Todo mês</option><option value="2">A cada 2 meses</option><option value="3">A cada 3 meses</option><option value="6">A cada 6 meses</option><option value="12">Todo ano</option></select></div>
+     </div>
+     <small class="muted">Serão criadas contas individuais, cada uma com seu próprio vencimento e status de pagamento.</small>
+    </div>`:''}`:`<div class="field"><label>Data do pagamento *</label><input name="date" type="date" required value="${esc(item.date||today)}"></div>`}
    ${!isPayable?`<div class="field"><label>Forma de pagamento</label><select name="payment"><option value="">Selecione...</option>${expensePaymentMethods.map(m=>`<option ${item.payment===m?'selected':''}>${esc(m)}</option>`).join('')}</select></div>`:''}
    <div class="field"><label>Observações</label><textarea name="notes" rows="2">${esc(item.notes||'')}</textarea></div>
   </div>
@@ -244,6 +252,10 @@ function renderExpenseForm(item={},isPayable=false){
  </form>`;
  $('formWrap').classList.remove('hidden');
  bindDecimalInput($('expenseForm').elements.value);
+ if(isPayable&&!item.id){
+  const recurring=$('payableRecurring'),options=$('recurrenceOptions');
+  recurring.onchange=()=>options.classList.toggle('hidden',!recurring.checked);
+ }
  $('cancelExpenseForm').onclick=()=>{$('formWrap').classList.add('hidden');editId=null;};
  $('expenseForm').onsubmit=async e=>{
   e.preventDefault();
@@ -253,19 +265,42 @@ function renderExpenseForm(item={},isPayable=false){
    data.value=decimalValue(data.value);
    if(!Number.isFinite(data.value)||data.value<=0)throw new Error('Informe um valor maior que zero.');
    if(editId)data.id=editId;else data.createdAt=new Date().toISOString();
+   let generatedRecurring=false;
    if(isPayable){
     data.paymentStatus='Em aberto';
     data.date='';
-    data.dueDate=data.dueDate;
     delete data.payment;
+    const firstDue=data.dueDate;
+    const recurring=data.recurring==='yes'&&!item.id;
+    delete data.recurring;
+    const count=recurring?Number(data.recurrenceCount||0):1;
+    const interval=recurring?Number(data.recurrenceMonths||1):1;
+    delete data.recurrenceCount;delete data.recurrenceMonths;
+    if(recurring&&(!Number.isInteger(count)||count<2||count>60))throw new Error('A quantidade deve ser entre 2 e 60 boletos.');
+    if(recurring&&(!Number.isInteger(interval)||interval<1||interval>12))throw new Error('Intervalo de recorrência inválido.');
+    if(recurring){
+     generatedRecurring=true;
+     const seriesId=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(36).slice(2));
+     const [yy,mm,dd]=firstDue.split('-').map(Number);
+     for(let n=0;n<count;n++){
+      const monthIndex=(mm-1)+(n*interval),year=yy+Math.floor(monthIndex/12),month=(monthIndex%12)+1;
+      const lastDay=new Date(year,month,0).getDate();
+      const due=new Date(year,month-1,Math.min(dd,lastDay));
+      const dueISO=[due.getFullYear(),String(due.getMonth()+1).padStart(2,'0'),String(due.getDate()).padStart(2,'0')].join('-');
+      await save('expenses',{...data,dueDate:dueISO,recurrenceId:seriesId,recurrenceNumber:n+1,recurrenceTotal:count,createdAt:new Date().toISOString()});
+     }
+    }else{
+     data.dueDate=firstDue;
+     await save('expenses',data);
+    }
    }else{
     data.paymentStatus='Pago';
     data.dueDate=item.dueDate||data.date;
     data.paidAt=data.date;
+    await save('expenses',data);
    }
-   await save('expenses',data);
    $('formWrap').classList.add('hidden');editId=null;
-   showToast(isPayable?'Conta a pagar salva.':'Despesa registrada.');
+   showToast(isPayable?(generatedRecurring?'Sequência de contas criada.':'Conta a pagar salva.'):'Despesa registrada.');
    await renderTable();await renderStats();await renderFinancialMovement();
   }catch(err){showToast('Não foi possível salvar: '+(err.message||'verifique os dados.'));}
   finally{submit.disabled=false;}
@@ -296,7 +331,7 @@ async function renderPayablesTable(){
   const emptyMsg=payablesFilter==='late'?'Nenhuma conta atrasada.':payablesFilter==='pending'?'Nenhuma conta pendente neste mês.':'Nenhuma conta atrasada ou pendente neste mês.';
   $('tableWrap').innerHTML=`<div class="filter-chips">${chip('all','Todas',late.length+pend.length)}${chip('pending','Pendentes do mês',pend.length)}${chip('late','Atrasadas',late.length)}</div>
    <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Atrasadas</span><strong>${money(sum(late))}</strong></div><div class="dashboard-metric"><span>Pendentes do mês</span><strong>${money(sum(pend))}</strong></div><div class="dashboard-metric"><span>Total da lista</span><strong>${money(total)}</strong></div></div>
-   ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dueOf(r)?dateBR(dueOf(r)):'Sem vencimento'}${isLate(r)?' <span class="late-badge">Atrasada</span>':''}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${emptyMsg}</div>`}
+   ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dueOf(r)?dateBR(dueOf(r)):'Sem vencimento'}${isLate(r)?' <span class="late-badge">Atrasada</span>':''}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}${r.recurrenceNumber?` <span class="muted small">(${r.recurrenceNumber}/${r.recurrenceTotal})</span>`:''}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${emptyMsg}</div>`}
    ${futureCount?`<p class="muted small">${futureCount} conta(s) com vencimento em meses futuros não aparecem nesta lista.</p>`:''}`;
   $('tableWrap').querySelectorAll('[data-pfilter]').forEach(b=>b.onclick=()=>{payablesFilter=b.dataset.pfilter;renderPayablesTable();});
   $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>renderForm(open.find(r=>r.id===b.dataset.edit)));
@@ -486,10 +521,46 @@ function renderServiceForm(item={}){
    const [vehicles,clients]=await Promise.all([all('vehicles'),all('clients')]);
    matchedVehicle=vehicles.find(v=>normalizePlate(v.plate)===plate)||null;
    if(!matchedVehicle){
-    details.classList.add('hidden');message.textContent='Veículo não cadastrado.';
-    if(confirm(`A placa ${plate} não está cadastrada. Deseja cadastrar o cliente e o veículo agora?`)){
-     returnToServicesAfterVehicleRegistration=true;editId=null;$('formWrap').classList.add('hidden');active='clients';renderTabs();renderSection();renderClientVehicleForm({plate});
-    }
+    details.classList.add('hidden');
+    message.innerHTML=`<div class="empty" style="text-align:left">
+     <strong>Placa ${esc(plate)} não cadastrada.</strong>
+     <p>Como deseja continuar?</p>
+     <div class="form-actions">
+      <button type="button" class="primary" id="newClientForPlate">Criar novo cadastro</button>
+      <button type="button" class="secondary" id="useExistingClient">Adicionar a cliente existente</button>
+     </div>
+     <div id="existingClientSearchBox" class="hidden" style="margin-top:12px">
+      <label for="existingClientSearch">Buscar cliente pelo nome</label>
+      <input id="existingClientSearch" type="search" placeholder="Digite o nome do cliente..." autocomplete="off">
+      <div id="existingClientResults" class="small" style="margin-top:8px"></div>
+     </div>
+    </div>`;
+    $('newClientForPlate').onclick=()=>{
+     returnToServicesAfterVehicleRegistration=true;editId=null;
+     $('formWrap').classList.add('hidden');active='clients';renderTabs();renderSection();
+     renderClientVehicleForm({plate});
+    };
+    $('useExistingClient').onclick=async()=>{
+     const box=$('existingClientSearchBox');box.classList.remove('hidden');
+     $('existingClientSearch').focus();
+     if(!$('existingClientSearch').dataset.bound){
+      $('existingClientSearch').dataset.bound='1';
+      let clientsCache=await all('clients');
+      const search=$('existingClientSearch'),results=$('existingClientResults');
+      const draw=()=>{
+       const term=normalizeText(search.value.trim());
+       const found=clientsCache.filter(c=>!term||normalizeText(c.name||'').includes(term)).slice(0,30);
+       results.innerHTML=found.length?found.map(c=>`<button type="button" class="action" data-client-pick="${esc(c.id)}" style="display:block;width:100%;text-align:left;margin:4px 0">${esc(c.name||'Cliente sem nome')}${c.phone?' • '+esc(c.phone):''}</button>`).join(''):'Nenhum cliente encontrado.';
+       results.querySelectorAll('[data-client-pick]').forEach(b=>b.onclick=()=>{
+        const selected=clientsCache.find(c=>String(c.id)===b.dataset.clientPick);if(!selected)return;
+        returnToServicesAfterVehicleRegistration=true;editId=null;
+        $('formWrap').classList.add('hidden');active='clients';renderTabs();renderSection();
+        renderClientVehicleForm({plate,clientId:selected.id,client:selected.name,clientRecord:selected});
+       });
+      };
+      search.addEventListener('input',draw);draw();
+     }
+    };
     return;
    }
    const client=clients.find(c=>c.id===matchedVehicle.clientId)||clients.find(c=>c.name===matchedVehicle.client)||{name:matchedVehicle.client||''};
