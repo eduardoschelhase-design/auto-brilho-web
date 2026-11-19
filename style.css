@@ -203,3 +203,6 @@ details.mini{margin-top:10px;font-size:13px}.mini-row{display:flex;justify-conte
 .kpis-2{margin-bottom:12px}
 .export-card{margin-top:12px}
 @media(min-width:860px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis-2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.check-line{display:flex;gap:10px;align-items:flex-start;margin:12px 0;font-size:13.5px;cursor:pointer}.check-line input{margin-top:3px}
+.import-preview table{font-size:13px}.import-preview .alert-panel p{margin:4px 0;font-size:13px}

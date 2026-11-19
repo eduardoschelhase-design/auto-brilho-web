@@ -1,22 +1,39 @@
-AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v25)
+AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v25; inclui tudo da v25)
 
-CORREÇÕES DA IMPORTAÇÃO EXCEL
-- Reconhece também os nomes das abas e cabeçalhos produzidos pela própria exportação do aplicativo
-  (Serviços, Pagamentos, Valor, Data pagamento, Vencimento, Forma, etc.).
-- Lê valores numéricos reais do Excel e interpreta formatos brasileiros como R$ 1.234,56,
-  1.234,56 e 1234.56.
-- Não importa linhas de despesas com valor ausente ou inválido; elas aparecem no aviso de conferência.
-- Na reimportação, encontra despesas correspondentes mesmo que o valor antigo esteja zerado e atualiza
-  esse valor, em vez de ignorar a linha como duplicada.
-- Mantém registros que já têm valor diferente de zero e evita atualizar uma despesa apenas porque
-  ela ocupa a mesma posição/linha de outra planilha.
-- Atualiza o cache do aplicativo para v26.
+SE ALGO DER ERRADO: volte ao ZIP da v25 e avise qual tela falhou.
 
-IMPORTANTE: a importação não apaga nem substitui todos os registros. Ela adiciona registros novos,
-ignora duplicados e corrige despesas correspondentes cujo valor esteja zerado. Faça backup e confira
-a prévia e os avisos antes de confirmar.
+IMPORTAÇÃO DE PLANILHA — REVISÃO COMPLETA (Relatórios)
+Problemas encontrados e corrigidos:
+1) Linhas puladas como "duplicadas": a identificação de cada linha usava só o número da linha. Ao importar um
+   segundo arquivo (ou um arquivo atualizado), as linhas novas "caíam" em registros da importação anterior e eram
+   ignoradas. Agora a identificação é pelo CONTEÚDO (data, cliente, placa, serviço, valor). Reimportar o mesmo
+   arquivo não duplica; arquivos diferentes não se atropelam; duas linhas idênticas legítimas entram as duas.
+2) Nomes exatos de abas e colunas: a própria exportação do app usava nomes que a importação não reconhecia.
+   Agora aceita variações (ex.: abas "Serviços", "Pagamentos"; colunas "Valor", "Forma", "Pagamento", "Veículo/placa",
+   "Telefone", "CPF/CNPJ", "Vencimento"...) e acha o cabeçalho mesmo com títulos acima dele.
+3) Valores errados: "R$ 1.500" virava 1,5. Agora valores e datas são lidos pelo valor real da célula e os textos
+   ("1.234,56", "1,234.56", "R$ 1.500") são interpretados corretamente. Telefones em notação científica são recuperados.
+4) Situações desconhecidas viravam "Cancelado": agora são reconhecidos Aguardando, Em andamento, Pronto, Entregue,
+   Feito, Recebida, Paga, etc. Situação desconhecida entra como Concluído/Pendente COM AVISO. Serviço sem situação
+   financeira e com forma de pagamento informada entra como Recebido (com aviso). Brinde sem valor entra com valor 0.
+5) Veículos sem cliente eram descartados: agora entram (e o cliente é criado automaticamente, se você deixar a opção marcada).
+6) Um erro em uma linha interrompia tudo: agora cada gravação tenta até 3 vezes e a importação continua.
+7) Clientes com o mesmo telefone e nomes diferentes (família) não são mais fundidos.
+8) Serviços idênticos no mesmo dia agora geram um pagamento cada.
 
-AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v24; inclui tudo da v24)
+O que você passa a ver:
+- Antes de importar: abas encontradas (e com que nome), linhas lidas/a importar/ignoradas, colunas não reconhecidas,
+  avisos e o motivo de cada linha que ficará de fora (com o número da linha da planilha), com botão para baixar essa lista em Excel.
+- Depois de importar: resumo (gravados, já existentes, não importados, falhas de gravação) e o relatório
+  "Linhas não importadas" (aba, linha, motivo e conteúdo) para corrigir a planilha e importar de novo com segurança.
+- A planilha exportada pelo app agora pode ser importada de volta (inclui recargas de crédito, serviços pagos com
+  crédito e pagamentos divididos).
+- Não pula mais para Serviços ao terminar; o botão "Ver serviços importados" faz isso.
+
+Arquivos alterados: app.js, style.css, index.html e sw.js (cache v26). Não mexa no config.js.
+
+--- v25 ---
+AUTO BRILHO WEB — ATUALIZAÇÃO v25 (sobre a v24; inclui tudo da v24)
 
 SE ALGO DER ERRADO: volte ao ZIP da v24 e avise qual tela falhou.
 
