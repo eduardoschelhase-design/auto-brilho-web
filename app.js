@@ -152,6 +152,8 @@ function renderSection(){
 }
 
 function renderForm(item={}){
+ // renderSection oculta o contêiner ao trocar de aba; todo formulário precisa reexibi-lo.
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
  if(active==='clients'){
   renderClientVehicleForm(item);
   return;
@@ -223,6 +225,7 @@ const expenseCategories=['Produtos','Funcionários','Pró-labore','Despesa mensa
 const expensePaymentMethods=['Pix','Dinheiro','Cartão','Transferência','Débito automático','Outro'];
 function renderExpenseForm(item={},isPayable=false){
  editId=item.id??null;
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
  const today=localISODate();
  const dueDate=item.dueDate||item.date||today;
  const formTitle=isPayable?'Conta a pagar':'Despesa paga';
@@ -1978,7 +1981,7 @@ renderSection=function(){
  $('sectionTitle').textContent=home?'Início':dashboard?'Dashboards':active==='pending'?'Pagamentos pendentes':active==='retorno'?'Retorno de clientes':active==='clients'?'Cadastro de clientes e veículos':active==='payables'?'Contas a pagar':active==='payments'?'Financeiro: entradas e saídas':active==='credits'?'Créditos dos clientes':modules[active]?.label||'Gestão';
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
- $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':active==='credits'?'+ Nova recarga':'+ Novo '+(modules[active]?.singular||'registro');
+ $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':active==='credits'?'+ Nova recarga':active==='expenses'?'+ Nova despesa':'+ Novo '+(modules[active]?.singular||'registro');
  $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':active==='credits'?'Buscar cliente…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };

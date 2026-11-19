@@ -1,3 +1,16 @@
+AUTO BRILHO WEB — ATUALIZAÇÃO v27 (correção, sobre a v26)
+
+SE ALGO DER ERRADO: volte ao ZIP da v26.
+
+CORREÇÃO: botões "+ Nova despesa" e "+ Nova conta a pagar"
+- O formulário era criado, mas ficava escondido (a troca de aba oculta a área do formulário e só alguns
+  formulários a reexibiam). Agora todo formulário reexibe a área ao abrir, inclusive Editar.
+- Rótulo corrigido: "+ Nova despesa".
+- Conferidos todos os botões de adicionar: Cadastro, Serviços, Financeiro, Créditos, Despesas e Contas a pagar.
+
+Arquivos alterados: app.js, index.html e sw.js (cache v27). Não mexa no config.js.
+
+--- v26 ---
 AUTO BRILHO WEB — ATUALIZAÇÃO v26 (sobre a v25; inclui tudo da v25)
 
 SE ALGO DER ERRADO: volte ao ZIP da v25 e avise qual tela falhou.
