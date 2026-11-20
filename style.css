@@ -242,3 +242,40 @@ input,select,textarea{width:100%;font:inherit;border:1px solid #cfd4dc;border-ra
 @media(min-width:1100px){#appShell main{padding-left:220px;padding-right:34px}.dashboard-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.dash-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.topbar{height:70px;min-height:70px;padding:8px 13px}.brandmark{width:44px;height:44px;border-radius:12px}.topbar strong{font-size:18px}.topbar small{font-size:10px}#appShell main{padding:14px 12px 28px 78px}#tabs{top:70px;width:68px;padding:13px 6px;gap:7px}.tab{width:54px;min-height:50px;padding:8px 4px;justify-content:center;text-align:center;font-size:0;border-radius:10px}.tab::first-letter{font-size:22px}.tab.active{box-shadow:0 3px 10px #d7192030}#stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.stat{padding:12px}.stat .value{font-size:20px}#mainPanel,#reportsPanel{padding:15px;border-radius:15px}.panel-head{align-items:flex-start}.panel h2{font-size:20px}.panel-head #addBtn{max-width:150px}.form-grid{grid-template-columns:1fr}.tools{flex-wrap:wrap}.tools input{flex-basis:100%}.notice{padding:12px}.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.login-screen{min-height:calc(100vh - 70px)}.login-card{padding:22px}}
 @media(max-width:420px){#appShell main{padding-left:72px;padding-right:9px}#tabs{width:62px;padding-left:4px;padding-right:4px}.tab{width:52px}.panel-head{gap:7px}.panel-head #addBtn{max-width:125px;font-size:11px;padding:10px 8px}.dashboard-metric{padding:11px}.dashboard-metric strong{font-size:17px}}
+
+
+/* ===== v31: corrigir nomes da navegação em todas as larguras ===== */
+@media(max-width:760px){
+  #tabs{
+    width:190px!important;
+    padding:13px 10px!important;
+    align-items:stretch!important;
+  }
+  #appShell main{
+    padding-left:202px!important;
+    padding-right:12px!important;
+  }
+  #tabs .tab{
+    width:100%!important;
+    min-width:0!important;
+    min-height:46px!important;
+    display:flex!important;
+    justify-content:flex-start!important;
+    align-items:center!important;
+    gap:10px!important;
+    padding:10px 11px!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow:visible!important;
+    font-size:13px!important;
+    line-height:1.25!important;
+    color:#e4e4e7!important;
+  }
+  #tabs .tab.active{color:#fff!important}
+  #tabs .tab::first-letter{font-size:13px!important}
+}
+@media(max-width:420px){
+  #tabs{width:176px!important;padding-left:8px!important;padding-right:8px!important}
+  #appShell main{padding-left:186px!important;padding-right:9px!important}
+  #tabs .tab{width:100%!important;font-size:12px!important;padding:10px 8px!important}
+}
