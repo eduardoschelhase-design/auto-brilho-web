@@ -8,14 +8,14 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=32">
+<link rel="stylesheet" href="style.css?v=33">
 <title>Auto Brilho | Gestão</title>
 </head>
 <body>
 <header class="topbar">
  <button id="menuToggle" class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="tabs">☰</button>
  <div class="brandmark">AB</div>
- <div><strong>Auto Brilho</strong><small>Gestão automotiva · v32</small></div>
+ <div><strong>Auto Brilho</strong><small>Gestão automotiva · v33</small></div>
  <button id="logoutBtn" class="install hidden" type="button">Sair</button>
  <button id="installBtn" class="install hidden" type="button">Instalar</button>
 </header>
@@ -79,7 +79,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 <script>
 (()=>{
  const toggle=document.getElementById('menuToggle');
@@ -107,7 +107,7 @@ if('serviceWorker' in navigator){
   document.body.appendChild(b);
   document.getElementById('updateNow').onclick=()=>location.reload();
  });
- window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=32').then(reg=>{
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=33').then(reg=>{
   if(reg&&reg.update)document.addEventListener('visibilitychange',()=>{if(!document.hidden)reg.update().catch(()=>{});});
  }).catch(err=>console.error('Falha ao atualizar o aplicativo:',err)));
 }

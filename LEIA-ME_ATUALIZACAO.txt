@@ -1,30 +1,18 @@
-AUTO BRILHO — VERSÃO 30 — REDESIGN VISUAL
+AUTO BRILHO WEB - VERSAO 33
 
-Esta atualização parte do pacote funcional v28 e reorganiza a interface para se aproximar da referência visual aprovada:
-- cabeçalho preto com destaque vermelho;
-- menu lateral escuro com seção ativa em vermelho;
-- área de trabalho clara, com cartões brancos;
-- formulários, tabelas, indicadores e gráficos com aparência mais limpa;
-- adaptação para celular, mantendo navegação lateral compacta.
+Esta atualizacao recupera o tema escuro preto/vermelho, mantendo o menu lateral recolhivel da versao 32.
 
-IMPORTANTE
-1. Faça backup dos arquivos atuais do GitHub antes de substituir.
-2. O arquivo config.js NÃO está incluído. Preserve o config.js já existente no repositório, pois contém a configuração de conexão com o Supabase.
-3. O app.js foi mantido a partir da v28, sem alteração de regras de negócio ou estrutura dos dados.
-4. Substitua os arquivos do pacote mantendo a mesma estrutura de pastas.
-5. Após publicar, abra o aplicativo e atualize a página. Se a versão antiga continuar em cache, feche e reabra o navegador ou use a opção de atualizar quando aparecer.
+ARQUIVOS ATUALIZADOS:
+- style.css: retorno ao fundo escuro e ajuste de contraste de paineis, formularios, tabelas e dashboards.
+- index.html: atualizacao da versao dos arquivos e identificacao visual para v33.
+- sw.js: atualizacao do cache para v33.
 
-VALIDAÇÃO TÉCNICA
-- app.js: verificação de sintaxe JavaScript aprovada (node --check).
-- sw.js: verificação de sintaxe JavaScript aprovada (node --check).
+ARQUIVOS PRESERVADOS:
+- app.js: sem alteracoes.
+- manifest.json e icones: preservados.
 
-A aparência deve ser validada em desktop e celular antes de considerar esta versão definitiva. A versão v28 deve ser mantida como cópia de segurança até a conclusão dos testes.
-
-
-VERSAO 32 - MENU RECOLHIVEL NO CELULAR
-- No celular, o menu lateral inicia fechado e a tela principal ocupa toda a largura.
-- O botao ☰ no topo abre o menu sobre o conteudo.
-- Ao escolher uma secao, tocar fora do menu ou pressionar Esc, o menu fecha.
-- Em telas maiores, o menu lateral permanece fixo como na versao anterior.
-- Esta atualizacao altera somente a navegacao e identificadores de cache/versao.
-- Preserve o arquivo config.js existente no GitHub; ele nao faz parte deste pacote.
+IMPORTANTE:
+- Preserve o config.js que ja esta no GitHub. Ele contem a configuracao do Supabase e nao faz parte deste pacote.
+- Nenhuma tabela ou dado do Supabase foi alterado.
+- Substitua no GitHub os arquivos style.css, index.html e sw.js pelos desta atualizacao.
+- Depois, atualize/reabra o aplicativo para carregar a versao nova.

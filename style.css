@@ -296,3 +296,65 @@ input,select,textarea{width:100%;font:inherit;border:1px solid #cfd4dc;border-ra
  body.menu-open{overflow:hidden}
 }
 @media(prefers-reduced-motion:reduce){#tabs,.menu-backdrop{transition:none}}
+
+/* ===== v33: retorno ao tema escuro Auto Brilho ===== */
+:root{
+ color-scheme:dark!important;
+ --navy:#080808;--navy2:#1b1b1b;--gold:#e51d2a;
+ --bg:#0b0b0c;--card:#171719;--ink:#f4f4f5;
+ --muted:#a3a3aa;--line:#343438;--green:#36b37e;--red:#ff5964;
+}
+html,body{background:#0b0b0c!important;color:#f4f4f5!important}
+.topbar{background:#050505!important;color:#fff!important;border-bottom-color:#e51d2a!important}
+#appShell main{background:transparent!important}
+#tabs{background:#080808!important;border-right-color:#303034!important}
+#tabs .tab{color:#e4e4e7!important}
+#tabs .tab:hover{background:#252529!important}
+#tabs .tab.active{background:#e51d2a!important;color:#fff!important;border-color:#e51d2a!important}
+#stats .stat{background:#19191c!important;border-color:#343438!important;color:#f4f4f5!important;box-shadow:0 3px 12px #0005!important}
+#stats .stat .label{color:#a3a3aa!important}
+#stats .stat .value{color:#fff!important}
+#mainPanel,#reportsPanel,.panel{background:#171719!important;color:#f4f4f5!important;border-color:#343438!important;box-shadow:0 5px 22px #0005!important}
+.panel h2,.panel h3,.panel strong{color:inherit}
+.muted,.small.muted{color:#a3a3aa!important}
+.eyebrow{color:#ff5964!important}
+.secondary{background:#303034!important;color:#f2f2f3!important;border:1px solid #48484f!important}
+input,select,textarea{background:#101012!important;color:#f5f5f6!important;border-color:#45454b!important;color-scheme:dark!important}
+input::placeholder,textarea::placeholder{color:#85858e!important}
+.field label,.login-card label{color:#dedee2!important}
+.form-wrap,.return-editor{background:#111113!important;color:#f4f4f5!important;border-color:#343438!important}
+.return-editor textarea{background:#101012!important;color:#f5f5f6!important}
+th{background:#252529!important;color:#c4c4cb!important;border-color:#38383e!important}
+td{background:transparent!important;color:#e8e8eb!important;border-color:#343438!important}
+td .action,.client-actions .action,.client-vehicle-row .action{background:#303034!important;color:#f4f4f5!important;border-color:#48484f!important}
+.empty{color:#a3a3aa!important}
+.reports{background:#171719!important;border-color:#343438!important}
+.notice{background:#19191c!important;color:#c9c9cf!important;border-color:#343438!important}
+.notice strong{color:#fff!important}
+footer{color:#85858e!important}
+.login-screen{background:linear-gradient(135deg,#0b0b0c,#171719)!important}
+.login-card{background:#171719!important;color:#f4f4f5!important;border-color:#39393e!important;box-shadow:0 16px 42px #0008!important}
+.login-card h1{color:#fff!important}
+.dashboard-period-note,.dashboard-chart-panel,.dash-card,.goal-card,.ready-notice,.history-panel,.import-preview,.financial-movement,.alert-panel,.exp-cat,.return-card,.svc-card,.client-card,.client-ranking,.kpi,.dashboard-metric{
+ background:#19191c!important;color:#f0f0f2!important;border-color:#38383e!important;box-shadow:0 3px 12px #0004!important
+}
+.dashboard-period-note span,.dashboard-chart-panel p,.dashboard-footnote,.chart-note,.dashboard-metric span,.kpi-label{color:#a3a3aa!important}
+.dashboard-metric strong,.kpi strong,.dashboard-chart-panel h3,.dash-card h3,.dashboard-comparison strong{color:#fff!important}
+.dashboard-legend,.legend,.vbar span,.hbar-top,.vbars-max,.area-axis,.exp-cat-head,.dashboard-comparison span{color:#b7b7bf!important}
+.dashboard-bars,.vbars{background:repeating-linear-gradient(to top,transparent 0,transparent 41px,#29292e 41px,#29292e 42px)!important;border-color:#38383e!important}
+.dashboard-bar-track,.hbar-track,.goal-bar{background:#303035!important}
+.donut .donut-n{fill:#fff!important}.donut .donut-s{fill:#a3a3aa!important}
+.area-wrap{border-color:#38383e!important}
+.client-vehicles,.credit-moves,.exp-list{border-color:#38383e!important}
+.danger-zone{background:#271416!important;border-color:#6b252b!important}
+.danger-zone h3{color:#ff7b83!important}.danger-zone p{color:#c5aeb0!important}
+.status-badge.st-concluido{background:#30343a!important;color:#e0e4e8!important}
+.st-aguardando{background:#493914!important;color:#ffd779!important}
+.st-em-andamento{background:#172f49!important;color:#a8d3ff!important}
+.st-pronto-para-retirada{background:#173b2b!important;color:#9be0b5!important}
+.st-cancelado{background:#4a1b20!important;color:#ffb2b8!important}
+.amount-in{color:#55d69a!important}.amount-out{color:#ff777f!important}
+#updateBanner{background:#202024!important;color:#fff!important}
+#updateBanner button{background:#e51d2a!important;color:#fff!important}
+.menu-toggle{background:#292929!important;color:#fff!important}
+.menu-backdrop{background:#0009!important}
