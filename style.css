@@ -206,3 +206,29 @@ details.mini{margin-top:10px;font-size:13px}.mini-row{display:flex;justify-conte
 
 .check-line{display:flex;gap:10px;align-items:flex-start;margin:12px 0;font-size:13.5px;cursor:pointer}.check-line input{margin-top:3px}
 .import-preview table{font-size:13px}.import-preview .alert-panel p{margin:4px 0;font-size:13px}
+
+/* ===== AUTO BRILHO v29 — INTERFACE MODERNA CLARA ===== */
+:root{color-scheme:light;--navy:#111111;--navy2:#292929;--gold:#d71920;--bg:#f3f4f6;--card:#ffffff;--ink:#181818;--muted:#69717c;--line:#e1e4e8;--green:#16794a;--red:#b42318}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.topbar{min-height:76px;height:auto;background:#111;color:#fff;padding:10px max(18px,calc((100% - 1200px)/2));border-bottom:3px solid var(--gold);box-shadow:0 4px 18px #1112}
+.brandmark{width:48px;height:48px;border-radius:14px;background:linear-gradient(145deg,#ed1c24,#b51219);box-shadow:0 5px 14px #d7192033}
+.topbar strong{font-size:19px;letter-spacing:-.3px}.topbar small{color:#c9cbd0}.install{background:#292929;border:1px solid #555;border-radius:10px}
+main{max-width:1200px;padding:22px 20px 44px}.stats{gap:14px;margin:8px 0 18px}
+.stat,.dashboard-metric,.dashboard-chart-panel,.dash-card,.kpi,.goal-card,.return-card,.svc-card,.client-card,.client-ranking,.history-panel,.import-preview,.financial-movement,.alert-panel,.exp-cat,.ready-notice{background:#fff!important;border:1px solid #e3e6ea!important;border-radius:16px!important;box-shadow:0 3px 12px #17202b08}
+.stat{padding:17px}.stat .label,.dashboard-metric span{color:#69717c}.stat .value{color:#17191d}
+.tabs{gap:7px;padding:4px 0 16px}.tab{background:#fff;color:#343942;border:1px solid #e0e3e8;border-radius:11px;padding:11px 14px;box-shadow:0 2px 5px #17202b08}.tab.active{background:#d71920;color:#fff;border-color:#d71920;box-shadow:0 4px 12px #d7192030}
+.panel{background:#fff;border:1px solid #e3e6ea;border-radius:18px;padding:22px;box-shadow:0 5px 22px #17202b0c}.panel h2{color:#17191d;letter-spacing:-.4px}.eyebrow{color:#d71920}.muted{color:#69717c}
+.primary{background:#d71920;color:#fff;box-shadow:0 3px 8px #d7192022}.primary:hover{background:#b9151b}.secondary{background:#f0f1f3;color:#30343b;border:1px solid #dfe2e7}
+input,select,textarea{background:#fff!important;color:#20242a!important;border:1px solid #cfd4dc!important;border-radius:10px;padding:12px 13px;color-scheme:light!important}input::placeholder,textarea::placeholder{color:#9299a3}input:focus,select:focus,textarea:focus{outline:3px solid #d7192018;border-color:#d71920!important}
+.form-wrap{background:#f8f9fb;border:1px solid #e1e4e9;border-radius:15px}.field label,.login-card label{color:#343a43}
+table{color:#242830}th{background:#f1f3f5;color:#5b6470}td{color:#303640;border-bottom-color:#e8eaee}td .action{background:#f3f4f6;color:#303640;border:1px solid #dce0e6}
+.reports{background:#fff;border-color:#e3e6ea}.notice{background:#fff;color:#5b6470;border:1px solid #e2e5e9}.notice strong{color:#20242a}.notice-icon{color:#d71920}footer{color:#7b838d}.toast{background:#20242a;color:#fff;border:1px solid #3a414b}
+.login-screen{background:linear-gradient(135deg,#f3f4f6,#fff)}.login-card{background:#fff;color:#181818;border:1px solid #e2e5e9;box-shadow:0 16px 42px #17202b12}.login-card h1{color:#17191d}
+.dashboard-period-note,.dashboard-chart-panel,.dash-card,.goal-card,.ready-notice,.return-editor{background:#fff!important;border:1px solid #e2e5e9!important;color:#20242a}.dashboard-period-note span,.dashboard-footnote,.chart-note{color:#69717c}.dashboard-metric strong,.kpi strong,.dash-card h3,.dashboard-chart-panel h3{color:#191d23}.dashboard-metric b{color:#c51b25}.dashboard-legend{color:#68717d}.dashboard-comparison span{color:#68717d}.dashboard-comparison strong{color:#242a32}
+.dashboard-bar-track{background:#edf0f3}.goal-bar{background:#eceff2}.vbars{border-bottom-color:#e0e4e8;background:repeating-linear-gradient(to top,transparent 0,transparent 41px,#edf0f3 41px,#edf0f3 42px)}.vbars-max,.vbar span,.hbar-top,.exp-cat-head{color:#5e6671}.hbar-track{background:#edf0f3}.legend small,.legend{color:#68717d}.donut .donut-n{fill:#20242a}.donut .donut-s{fill:#69717c}.area-wrap{border-bottom-color:#e2e5e9}.area-axis{color:#7b838d}
+.client-card-head>strong{background:#f0f2f4;color:#333}.client-vehicles,.credit-moves{border-color:#e3e6ea}.client-actions .action,.client-vehicle-row .action{background:#f2f3f5;color:#343a43;border-color:#dfe2e7}.return-editor{background:#f8f9fb!important}.return-editor textarea{background:#fff!important;color:#20242a!important}
+.svc-day,.filter-chip{background:#fff;color:#414852;border-color:#dfe3e8}.filter-chip.active{background:#d71920;color:#fff;border-color:#d71920}.kpi{border-left-color:#d8dde3!important}.kpi.k-red{border-left-color:#d71920!important}.kpi.k-green{border-left-color:#218653!important}.kpi.k-gray{border-left-color:#9299a3!important}.kpi.k-blue{border-left-color:#3985c9!important}.kpi-label{color:#68717d}
+.danger-zone{background:#fff7f7;border-color:#f0c9cc}.danger-zone h3{color:#a51b23}.dup-member{border-color:#e5e8ec}#updateBanner{background:#20242a}
+.status-badge.st-concluido{background:#edf0f2;color:#4d5661}.st-aguardando{background:#fff4d8;color:#8a5b00}.st-em-andamento{background:#e7f1ff;color:#235b9b}.st-pronto-para-retirada{background:#e5f5eb;color:#17643a}.st-cancelado{background:#fde9e9;color:#a51d25}.amount-in{color:#16794a}.amount-out{color:#b42318}
+@media(min-width:860px){.dashboard-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.dashboard-content{gap:18px}}
+@media(max-width:600px){main{padding:13px 12px 32px}.topbar{padding:9px 13px;min-height:66px}.brandmark{width:42px;height:42px}.stats{gap:8px}.stat{padding:12px}.panel{padding:15px;border-radius:15px}.panel-head{gap:8px}.tab{padding:10px 12px}.dashboard-metric{padding:12px}}
