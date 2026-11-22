@@ -1,18 +1,14 @@
-AUTO BRILHO WEB - VERSAO 33
+AUTO BRILHO WEB - VERSAO 34
 
-Esta atualizacao recupera o tema escuro preto/vermelho, mantendo o menu lateral recolhivel da versao 32.
+ALTERACOES:
+- app.js: o aplicativo agora SEMPRE abre na tela de Inicio (nao restaura mais a ultima aba/rascunho).
+- index.html: a logo (icon-192.png) aparece como imagem no topo, no login e na recuperacao de senha, no lugar do texto "AB".
+- style.css: ajustes para exibir a logo em imagem.
+- sw.js: cache atualizado para v34.
 
-ARQUIVOS ATUALIZADOS:
-- style.css: retorno ao fundo escuro e ajuste de contraste de paineis, formularios, tabelas e dashboards.
-- index.html: atualizacao da versao dos arquivos e identificacao visual para v33.
-- sw.js: atualizacao do cache para v33.
-
-ARQUIVOS PRESERVADOS:
-- app.js: sem alteracoes.
-- manifest.json e icones: preservados.
+ARQUIVOS PRESERVADOS: manifest.json, icon-192.png, icon-512.png.
 
 IMPORTANTE:
-- Preserve o config.js que ja esta no GitHub. Ele contem a configuracao do Supabase e nao faz parte deste pacote.
-- Nenhuma tabela ou dado do Supabase foi alterado.
-- Substitua no GitHub os arquivos style.css, index.html e sw.js pelos desta atualizacao.
-- Depois, atualize/reabra o aplicativo para carregar a versao nova.
+- Preserve o config.js que ja esta no GitHub (nao faz parte deste pacote).
+- Substitua no GitHub: app.js, index.html, style.css e sw.js. Mantenha os icones na mesma pasta.
+- Depois, feche e reabra o aplicativo (ou toque em "Atualizar agora").

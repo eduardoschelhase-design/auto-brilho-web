@@ -2688,6 +2688,10 @@ function clearServiceDraft(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
 function readJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
 function restoreUiStateOnce(){
  if(uiRestoreDone)return null;uiRestoreDone=true;
+ // v34: o aplicativo sempre abre na tela de Início; descarta o estado salvo da sessão anterior.
+ try{localStorage.removeItem(UI_STATE_KEY);localStorage.removeItem(DRAFT_KEY);}catch(e){}
+ active='home';
+ return null;
  let st=readJson(UI_STATE_KEY),draft=readJson(DRAFT_KEY);
  if(st&&Date.now()-st.t>=UI_STATE_MAX_AGE)st=null;
  if(draft&&Date.now()-draft.t>=UI_STATE_MAX_AGE)draft=null;
