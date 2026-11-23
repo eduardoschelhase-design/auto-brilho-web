@@ -361,3 +361,8 @@ footer{color:#85858e!important}
 
 /* v34: logo em imagem */
 .brandmark{background:none;box-shadow:none;overflow:hidden;padding:0}.brandmark img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}.login-mark{width:72px;height:72px;border-radius:18px}
+
+/* v35: último serviço da placa */
+.last-service-box{margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--navy2);border:1px solid var(--line);border-left:4px solid var(--gold);color:var(--ink);font-size:15px}
+.last-service-box.first{border-left-color:var(--green)}
+.last-service-box.hidden{display:none!important}

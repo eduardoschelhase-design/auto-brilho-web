@@ -1,10 +1,10 @@
-AUTO BRILHO WEB - VERSAO 34
+AUTO BRILHO WEB - VERSAO 35
 
 ALTERACOES:
-- app.js: o aplicativo agora SEMPRE abre na tela de Inicio (nao restaura mais a ultima aba/rascunho).
-- index.html: a logo (icon-192.png) aparece como imagem no topo, no login e na recuperacao de senha, no lugar do texto "AB".
-- style.css: ajustes para exibir a logo em imagem.
-- sw.js: cache atualizado para v34.
+- app.js: ao abrir um novo servico e localizar a placa, aparece o "Ultimo servico" com a data e quantos dias se passaram (hoje / ha 1 dia / ha X dias), alem do tipo de servico e do total de servicos no historico. Se a placa nao tiver servico anterior, mostra "Primeiro servico deste veiculo". Servicos cancelados e datas futuras nao entram na conta; ao editar um servico, ele proprio e ignorado. O valor do ultimo servico fica oculto para perfil de funcionario.
+- style.css: estilo do aviso (tema escuro).
+- index.html: versao v35 no cabecalho.
+- sw.js: cache atualizado para v35.
 
 ARQUIVOS PRESERVADOS: manifest.json, icon-192.png, icon-512.png.
 

@@ -380,6 +380,7 @@ function renderServiceForm(item={}){
    </div>
    <div id="serviceVehicleMessage" class="muted small">Informe a placa e toque em “Buscar veículo”.</div>
    <div id="serviceDetails" class="${item.id?'':'hidden'}">
+    <div id="serviceLastInfo" class="last-service-box hidden"></div>
     <div class="form-grid">
      <div class="field"><label>Proprietário</label><input name="client" id="serviceClient" readonly required></div>
      <div class="field"><label>Veículo / placa</label><input name="vehicle" id="serviceVehicle" readonly required></div>
@@ -513,6 +514,23 @@ function renderServiceForm(item={}){
   matchedVehicle=null; details.classList.add('hidden');
   message.textContent='Toque em “Buscar veículo” para localizar o cadastro.';
  });
+ // Mostra a data do último serviço da placa e quantos dias se passaram desde então.
+ async function showLastService(plate){
+  const box=$('serviceLastInfo');if(!box)return;
+  box.className='last-service-box hidden';box.textContent='';
+  try{
+   const today=localISODate();
+   const list=(await all('services')).filter(x=>normalizePlate(x.vehicle)===plate&&x.id!==editId&&x.status!=='Cancelado'&&x.date&&String(x.date)<=today)
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+   const last=list[0];
+   if(!last){box.className='last-service-box first';box.innerHTML='🆕 <strong>Primeiro serviço</strong> deste veículo (nenhum serviço anterior registrado).';return;}
+   const days=Math.round((new Date(today+'T12:00:00')-new Date(String(last.date).slice(0,10)+'T12:00:00'))/86400000);
+   const ago=days<=0?'hoje':days===1?'há 1 dia':`há ${days} dias`;
+   box.className='last-service-box';
+   box.innerHTML=`🕒 <strong>Último serviço:</strong> ${dateBR(String(last.date).slice(0,10))} (${ago})`+
+    `<div class="muted small">${esc(last.service||'Serviço')}${!isEmployee()&&last.value!==undefined&&last.value!==''?' · '+money(last.value):''}${list.length>1?' · '+list.length+' serviço(s) no histórico':''}</div>`;
+  }catch(err){console.error('Erro ao buscar último serviço:',err);}
+ }
  async function findVehicle(){
   const plate=normalizePlate(plateInput.value); plateInput.value=plate;
   if(!plate){showToast('Informe a placa do veículo.');plateInput.focus();return;}
@@ -568,6 +586,7 @@ function renderServiceForm(item={}){
    $('serviceClient').value=client.name;$('serviceVehicle').value=plate;
    $('serviceVehicleInfo').textContent=[matchedVehicle.brand,matchedVehicle.model,matchedVehicle.type,matchedVehicle.color].filter(Boolean).join(' • ');
    details.classList.remove('hidden');message.textContent=`Veículo localizado: ${plate}. Dados preenchidos.`;
+   await showLastService(plate);
   }catch(err){matchedVehicle=null;details.classList.add('hidden');message.textContent='Não foi possível consultar a placa. Verifique a conexão.';console.error('Erro ao buscar veículo pela placa:',err);}
   finally{button.disabled=false;}
  }
