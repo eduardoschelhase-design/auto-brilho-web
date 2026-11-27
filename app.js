@@ -307,7 +307,7 @@ function renderExpenseForm(item={},isPayable=false){
  };
 }
 
-let payablesFilter='all', payFrom='', payTo='', payCat='all';
+let payablesFilter='all', payFrom='', payTo='', payCat='all', payDesc='', payFiltersOpen=false;
 // v36: ao confirmar, o valor pago pode ser diferente do valor da conta (juros, multa ou desconto).
 function payConfirmDiffText(orig,paid){
  const diff=Math.round((paid-orig)*100)/100;
@@ -387,16 +387,19 @@ async function renderPayablesTable(){
    else if(payablesFilter==='pending')base=base.filter(isMonthPending);
   }else base=payablesFilter==='late'?late:payablesFilter==='pending'?pend:[...late,...pend];
   if(payCat!=='all')base=base.filter(r=>catOf(r)===payCat);
+  const pd=normalizeText(payDesc);
+  if(pd)base=base.filter(r=>normalizeText(r.description).includes(pd));
   const open=base.filter(matches).sort((a,b)=>(dueOf(a)||'9999').localeCompare(dueOf(b)||'9999'));
   const total=sum(open);
   const chip=(key,label,n)=>`<button type="button" class="filter-chip ${payablesFilter===key?'active':''}" data-pfilter="${key}">${label} (${n})</button>`;
   const catList=[...new Set([...expenseCategories,...openRows.map(catOf)])];
-  const filterBar=`<div class="filter-bar"><div class="field"><label for="payFrom">Vencimento de</label><input type="date" id="payFrom" value="${esc(payFrom)}"></div><div class="field"><label for="payTo">até</label><input type="date" id="payTo" value="${esc(payTo)}"></div><div class="field"><label for="payCat">Categoria</label><select id="payCat"><option value="all">Todas as categorias</option>${catList.map(c=>`<option value="${esc(c)}" ${payCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div><button type="button" class="secondary" id="payClear">Limpar filtros</button></div>`;
+  const payActive=[rangeOn,payCat!=='all',!!pd].filter(Boolean).length;
+  const filterBar=`<details class="return-editor filter-details" id="payFilters" ${payFiltersOpen?'open':''}><summary>Filtros${payActive?` (${payActive} ativo${payActive>1?'s':''})`:''}</summary><div class="filter-bar"><div class="field"><label for="payFrom">Vencimento de</label><input type="date" id="payFrom" value="${esc(payFrom)}"></div><div class="field"><label for="payTo">até</label><input type="date" id="payTo" value="${esc(payTo)}"></div><div class="field"><label for="payCat">Categoria</label><select id="payCat"><option value="all">Todas as categorias</option>${catList.map(c=>`<option value="${esc(c)}" ${payCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div class="field"><label for="payDesc">Descrição</label><input type="text" id="payDesc" value="${esc(payDesc)}" placeholder="Ex.: aluguel, boleto" autocomplete="off"></div><button type="button" class="secondary" id="payClear">Limpar filtros</button></div></details>`;
   const periodText=rangeOn?(payFrom&&payTo?`vencimento de ${dateBR(payFrom)} a ${dateBR(payTo)}`:payFrom?`vencimento a partir de ${dateBR(payFrom)}`:`vencimento até ${dateBR(payTo)}`):'';
   const chipLabel=payablesFilter==='late'?'Atrasadas':payablesFilter==='pending'?'Pendentes do mês':'';
   const rawQ=$('searchInput').value.trim();
-  const filtered=rangeOn||payCat!=='all'||!!q;
-  const filterDesc=[chipLabel,payCat!=='all'?payCat:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
+  const filtered=rangeOn||payCat!=='all'||!!q||!!pd;
+  const filterDesc=[chipLabel,payCat!=='all'?payCat:'',pd?`descrição “${payDesc.trim()}”`:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
   const fLate=open.filter(isLate), fRest=open.filter(r=>!isLate(r));
   const resultHtml=filtered?`<div class="filter-result"><div class="filter-result-head"><strong>Resultado do filtro · ${open.length} conta(s) em aberto</strong><span class="muted small">${esc(filterDesc||'Todas as contas em aberto')}</span></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Total no filtro</span><strong>${money(total)}</strong><small class="muted">${open.length} conta(s)</small></div>${fLate.length?`<div class="dashboard-metric"><span>Atrasadas</span><strong>${money(sum(fLate))}</strong><small class="muted">${fLate.length} conta(s)</small></div>`:''}${(fRest.length&&fLate.length)?`<div class="dashboard-metric"><span>A vencer</span><strong>${money(sum(fRest))}</strong><small class="muted">${fRest.length} conta(s)</small></div>`:''}</div></div>`:'';
   const emptyMsg=filtered?'Nenhuma conta em aberto para o filtro escolhido.':payablesFilter==='late'?'Nenhuma conta atrasada.':payablesFilter==='pending'?'Nenhuma conta pendente neste mês.':'Nenhuma conta atrasada ou pendente neste mês.';
@@ -411,7 +414,12 @@ async function renderPayablesTable(){
   $('payFrom').onchange=e=>{payFrom=e.target.value||'';fixRange();renderPayablesTable();};
   $('payTo').onchange=e=>{payTo=e.target.value||'';fixRange();renderPayablesTable();};
   $('payCat').onchange=e=>{payCat=e.target.value||'all';renderPayablesTable();};
-  $('payClear').onclick=()=>{payFrom='';payTo='';payCat='all';payablesFilter='all';$('searchInput').value='';renderPayablesTable();};
+  $('payClear').onclick=()=>{payFrom='';payTo='';payCat='all';payDesc='';payablesFilter='all';$('searchInput').value='';renderPayablesTable();};
+  $('payFilters').ontoggle=()=>{payFiltersOpen=$('payFilters').open;};
+  $('payDesc').oninput=e=>{
+   payDesc=e.target.value;clearTimeout(filterDescTimer);
+   filterDescTimer=setTimeout(async()=>{payFiltersOpen=true;await renderPayablesTable();const el=$('payDesc');if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length);}catch(_){}}},450);
+  };
   $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>renderForm(open.find(r=>r.id===b.dataset.edit)));
   $('tableWrap').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{
    const r=open.find(x=>x.id===b.dataset.pay);if(!r)return;
@@ -3644,7 +3652,7 @@ async function setupExcelImport(){
 
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
 let financeMonth='', financeKind='all', financeCfgOpen=false;
-let financeFrom='', financeTo='', financeCat='all';
+let financeFrom='', financeTo='', financeCat='all', financeDesc='', financeFiltersOpen=false, filterDescTimer=null;
 const otherIncomeMethods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'];
 async function renderFinancePanel(){
  try{
@@ -3673,6 +3681,8 @@ async function renderFinancePanel(){
   else if(financeKind==='out')rows=rows.filter(x=>x.dir==='out');
   else if(financeKind==='other')rows=rows.filter(x=>x.other);
   if(financeCat!=='all')rows=rows.filter(x=>x.cat===financeCat);
+  const fd=normalizeText(financeDesc);
+  if(fd)rows=rows.filter(x=>normalizeText(x.description).includes(fd));
   if(q)rows=rows.filter(x=>normalizeText([x.description,x.person,x.method,x.type,x.status,x.cat,x.sub].join(' ')).includes(q));
   rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const shown=rows.slice(0,300);
@@ -3681,8 +3691,8 @@ async function renderFinancePanel(){
   const periodText=rangeOn?(financeFrom&&financeTo?`de ${dateBR(financeFrom)} a ${dateBR(financeTo)}`:financeFrom?`a partir de ${dateBR(financeFrom)}`:`até ${dateBR(financeTo)}`):monthLabel;
   const kindLabels={in:'Entradas',out:'Saídas',other:'Outras entradas'};
   const rawQ=$('searchInput').value.trim();
-  const filtersActive=rangeOn||financeCat!=='all'||financeKind!=='all'||!!q;
-  const filterDesc=[kindLabels[financeKind]||'',financeCat!=='all'?financeCat:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
+  const filtersActive=rangeOn||financeCat!=='all'||financeKind!=='all'||!!q||!!fd;
+  const filterDesc=[kindLabels[financeKind]||'',financeCat!=='all'?financeCat:'',fd?`descrição “${financeDesc.trim()}”`:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
   // Soma de TODOS os lançamentos do filtro (não só dos 300 exibidos na lista).
   const fOutPaid=rows.filter(x=>x.dir==='out'&&x.status==='Pago'), fOutOpen=rows.filter(x=>x.dir==='out'&&x.status!=='Pago');
   const fInPaid=rows.filter(x=>x.dir==='in'&&x.status==='Pago'), fInOpen=rows.filter(x=>x.dir==='in'&&x.status!=='Pago');
@@ -3697,7 +3707,8 @@ async function renderFinancePanel(){
   const outCatList=[...new Set([...expenseCategories,...expenses.map(e=>canonicalExpenseCategory(e.category))])];
   const inCatList=['Serviço','Outra entrada','Recarga de crédito'];
   const catOpt=c=>`<option value="${esc(c)}" ${financeCat===c?'selected':''}>${esc(c)}</option>`;
-  const filterBarHtml=`<div class="filter-bar"><div class="field"><label for="financeFrom">De</label><input type="date" id="financeFrom" value="${esc(financeFrom)}"></div><div class="field"><label for="financeTo">Até</label><input type="date" id="financeTo" value="${esc(financeTo)}"></div><div class="field"><label for="financeCat">Categoria</label><select id="financeCat"><option value="all">Todas as categorias</option><optgroup label="Saídas">${outCatList.map(catOpt).join('')}</optgroup><optgroup label="Entradas">${inCatList.map(catOpt).join('')}</optgroup></select></div><button type="button" class="secondary" id="financeClear">Limpar filtros</button></div>${rangeOn?'<p class="muted small" style="margin:-4px 0 10px">Período livre ativo: o mês escolhido acima é ignorado.</p>':''}`;
+  const finActive=[rangeOn,financeCat!=='all',!!fd].filter(Boolean).length;
+  const filterBarHtml=`<details class="return-editor filter-details" id="financeFilters" ${financeFiltersOpen?'open':''}><summary>Filtros${finActive?` (${finActive} ativo${finActive>1?'s':''})`:''}</summary><div class="filter-bar"><div class="field"><label for="financeFrom">De</label><input type="date" id="financeFrom" value="${esc(financeFrom)}"></div><div class="field"><label for="financeTo">Até</label><input type="date" id="financeTo" value="${esc(financeTo)}"></div><div class="field"><label for="financeCat">Categoria</label><select id="financeCat"><option value="all">Todas as categorias</option><optgroup label="Saídas">${outCatList.map(catOpt).join('')}</optgroup><optgroup label="Entradas">${inCatList.map(catOpt).join('')}</optgroup></select></div><div class="field"><label for="financeDesc">Descrição</label><input type="text" id="financeDesc" value="${esc(financeDesc)}" placeholder="Ex.: PGTO Maria" autocomplete="off"></div><button type="button" class="secondary" id="financeClear">Limpar filtros</button></div>${rangeOn?'<p class="muted small" style="margin:6px 0 0">Período livre ativo: o mês escolhido acima é ignorado.</p>':''}</details>`;
   const chipsHtml=`<div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>`;
   const subLine=r=>{const p=[r.dir==='out'?r.cat:'',r.person,r.method].filter(Boolean).map(esc);if(r.fee>0)p.push('taxa '+money(r.fee));if(r.interest>=0.01)p.push('juros/multa '+money(r.interest));else if(r.interest<=-0.01)p.push('desconto '+money(-r.interest));return p.length?`<br><small class="muted">${p.join(' · ')}</small>`:'';};
 const pctText=v=>String(Number(v||0)).replace('.',',');
@@ -3722,7 +3733,12 @@ const pctText=v=>String(Number(v||0)).replace('.',',');
    if((isOut&&(financeKind==='in'||financeKind==='other'))||(isIn&&financeKind==='out'))financeKind='all';
    renderFinancePanel();
   };
-  $('financeClear').onclick=()=>{financeFrom='';financeTo='';financeCat='all';financeKind='all';$('searchInput').value='';renderFinancePanel();};
+  $('financeClear').onclick=()=>{financeFrom='';financeTo='';financeCat='all';financeDesc='';financeKind='all';$('searchInput').value='';renderFinancePanel();};
+  $('financeFilters').ontoggle=()=>{financeFiltersOpen=$('financeFilters').open;};
+  $('financeDesc').oninput=e=>{
+   financeDesc=e.target.value;clearTimeout(filterDescTimer);
+   filterDescTimer=setTimeout(async()=>{financeFiltersOpen=true;await renderFinancePanel();const el=$('financeDesc');if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length);}catch(_){}}},450);
+  };
   $('saveSettingsBtn').onclick=async()=>{
    try{
     const pct=id=>{const n=decimalValue($(id).value);if(!Number.isFinite(n)||n<0||n>30)throw new Error('Taxas devem estar entre 0% e 30%.');return n;};
