@@ -307,11 +307,63 @@ function renderExpenseForm(item={},isPayable=false){
  };
 }
 
-let payablesFilter='all';
+let payablesFilter='all', payFrom='', payTo='', payCat='all';
+// v36: ao confirmar, o valor pago pode ser diferente do valor da conta (juros, multa ou desconto).
+function payConfirmDiffText(orig,paid){
+ const diff=Math.round((paid-orig)*100)/100;
+ if(diff>=0.01)return `<span class="amount-out">Acréscimo de ${money(diff)} sobre o valor original (juros/multa).</span>`;
+ if(diff<=-0.01)return `<span class="amount-in">Desconto de ${money(-diff)} sobre o valor original.</span>`;
+ return '<span class="muted">Mesmo valor da conta.</span>';
+}
+function renderPayConfirmForm(r){
+ editId=null;
+ const orig=Number(r.value||0), today=localISODate();
+ $('formWrap').style.display='';$('formWrap').classList.remove('hidden');
+ $('formWrap').innerHTML=`<form id="payConfirmForm">
+  <h3>Confirmar pagamento</h3>
+  <p class="muted small">${esc(r.description||'Conta a pagar')}${r.category?' · '+esc(canonicalExpenseCategory(r.category)):''}${r.dueDate?' · vencimento '+dateBR(r.dueDate):''} · valor original <b>${money(orig)}</b></p>
+  <div class="form-grid">
+   <div class="field"><label>Valor pago (R$) *</label><input name="value" type="text" inputmode="decimal" required value="${esc(decimalText(orig))}" placeholder="0,00"></div>
+   <div class="field"><label>Data do pagamento *</label><input name="date" type="date" required value="${today}"></div>
+   <div class="field"><label>Forma de pagamento *</label><select name="payment" required>${expensePaymentMethods.map(m=>`<option ${m==='Pix'?'selected':''}>${esc(m)}</option>`).join('')}</select></div>
+  </div>
+  <p class="pay-diff small" id="payDiff"></p>
+  <div class="form-actions"><button type="button" class="secondary" id="payCancel">Cancelar</button><button class="primary" type="submit">Confirmar pagamento</button></div>
+ </form>`;
+ const form=$('payConfirmForm'), valueInput=form.elements.value, diffEl=$('payDiff');
+ bindDecimalInput(valueInput);
+ const updateDiff=()=>{const n=decimalValue(valueInput.value);diffEl.innerHTML=(Number.isFinite(n)&&n>0)?payConfirmDiffText(orig,n):'';};
+ valueInput.addEventListener('input',updateDiff);updateDiff();
+ $('payCancel').onclick=()=>$('formWrap').classList.add('hidden');
+ form.onsubmit=async e=>{
+  e.preventDefault();
+  const submit=form.querySelector('[type=submit]');submit.disabled=true;
+  try{
+   const d=Object.fromEntries(new FormData(form).entries());
+   const paid=decimalValue(d.value);
+   if(!Number.isFinite(paid)||paid<=0)throw new Error('Informe o valor pago, maior que zero.');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date||''))throw new Error('Informe uma data de pagamento válida.');
+   const method=expensePaymentMethods.find(x=>x===d.payment);
+   if(!method)throw new Error('Escolha a forma de pagamento.');
+   const diff=Math.round((paid-orig)*100)/100;
+   // "value" passa a ser o valor realmente pago: é ele que alimenta Despesas, Financeiro e Dashboards.
+   const rec={...r,paymentStatus:'Pago',payment:method,date:d.date,paidAt:d.date,value:paid};
+   delete rec.originalValue;delete rec.interest;
+   if(Math.abs(diff)>=0.01){rec.originalValue=orig;rec.interest=diff;}
+   await save('expenses',rec);
+   $('formWrap').classList.add('hidden');
+   await closeDueNotificationsIfClear();
+   showToast(diff>=0.01?`Pagamento confirmado com acréscimo de ${money(diff)}.`:diff<=-0.01?`Pagamento confirmado com desconto de ${money(-diff)}.`:'Pagamento confirmado e lançado em Despesas.');
+   await renderTable();await renderStats();await renderFinancialMovement();
+  }catch(err){showToast('Não foi possível confirmar: '+(err.message||'verifique os dados.'));}
+  finally{submit.disabled=false;}
+ };
+ try{$('formWrap').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}
+}
 async function renderPayablesTable(){
  try{
   const rows=await all('expenses');
-  const q=$('searchInput').value.trim().toLocaleLowerCase('pt-BR');
+  const q=normalizeText($('searchInput').value);
   const today=localISODate(), monthKey=today.slice(0,7);
   const isOpen=r=>r.paymentStatus==='Em aberto'||r.paymentStatus==='Pendente';
   const dueOf=r=>/^\d{4}-\d{2}-\d{2}$/.test(String(r.dueDate||''))?r.dueDate:'';
@@ -319,36 +371,51 @@ async function renderPayablesTable(){
   const isLate=r=>!!dueOf(r)&&dueOf(r)<today;
   // Pendente: ainda não venceu e vence neste mês (ou está sem data de vencimento).
   const isMonthPending=r=>!isLate(r)&&(!dueOf(r)||dueOf(r).slice(0,7)===monthKey);
-  const matches=r=>!q||Object.values(r).some(v=>String(v??'').toLocaleLowerCase('pt-BR').includes(q));
+  const matches=r=>!q||Object.values(r).some(v=>normalizeText(v).includes(q));
+  const catOf=r=>canonicalExpenseCategory(r.category);
+  // Período (v36): filtra pelo vencimento e passa a incluir também meses futuros.
+  const rangeOn=!!(payFrom||payTo);
+  const inRange=d=>!!d&&(!payFrom||d>=payFrom)&&(!payTo||d<=payTo);
   const openRows=rows.filter(isOpen);
   const late=openRows.filter(isLate), pend=openRows.filter(isMonthPending);
   const futureCount=openRows.length-late.length-pend.length;
   const sum=a=>a.reduce((n,r)=>n+Number(r.value||0),0);
-  const base=payablesFilter==='late'?late:payablesFilter==='pending'?pend:[...late,...pend];
+  let base;
+  if(rangeOn){
+   base=openRows.filter(r=>inRange(dueOf(r)));
+   if(payablesFilter==='late')base=base.filter(isLate);
+   else if(payablesFilter==='pending')base=base.filter(isMonthPending);
+  }else base=payablesFilter==='late'?late:payablesFilter==='pending'?pend:[...late,...pend];
+  if(payCat!=='all')base=base.filter(r=>catOf(r)===payCat);
   const open=base.filter(matches).sort((a,b)=>(dueOf(a)||'9999').localeCompare(dueOf(b)||'9999'));
   const total=sum(open);
   const chip=(key,label,n)=>`<button type="button" class="filter-chip ${payablesFilter===key?'active':''}" data-pfilter="${key}">${label} (${n})</button>`;
-  const emptyMsg=payablesFilter==='late'?'Nenhuma conta atrasada.':payablesFilter==='pending'?'Nenhuma conta pendente neste mês.':'Nenhuma conta atrasada ou pendente neste mês.';
-  $('tableWrap').innerHTML=`<div class="filter-chips">${chip('all','Todas',late.length+pend.length)}${chip('pending','Pendentes do mês',pend.length)}${chip('late','Atrasadas',late.length)}</div>
+  const catList=[...new Set([...expenseCategories,...openRows.map(catOf)])];
+  const filterBar=`<div class="filter-bar"><div class="field"><label for="payFrom">Vencimento de</label><input type="date" id="payFrom" value="${esc(payFrom)}"></div><div class="field"><label for="payTo">até</label><input type="date" id="payTo" value="${esc(payTo)}"></div><div class="field"><label for="payCat">Categoria</label><select id="payCat"><option value="all">Todas as categorias</option>${catList.map(c=>`<option value="${esc(c)}" ${payCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div><button type="button" class="secondary" id="payClear">Limpar filtros</button></div>`;
+  const periodText=rangeOn?(payFrom&&payTo?`vencimento de ${dateBR(payFrom)} a ${dateBR(payTo)}`:payFrom?`vencimento a partir de ${dateBR(payFrom)}`:`vencimento até ${dateBR(payTo)}`):'';
+  const chipLabel=payablesFilter==='late'?'Atrasadas':payablesFilter==='pending'?'Pendentes do mês':'';
+  const rawQ=$('searchInput').value.trim();
+  const filtered=rangeOn||payCat!=='all'||!!q;
+  const filterDesc=[chipLabel,payCat!=='all'?payCat:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
+  const fLate=open.filter(isLate), fRest=open.filter(r=>!isLate(r));
+  const resultHtml=filtered?`<div class="filter-result"><div class="filter-result-head"><strong>Resultado do filtro · ${open.length} conta(s) em aberto</strong><span class="muted small">${esc(filterDesc||'Todas as contas em aberto')}</span></div><div class="dashboard-metrics"><div class="dashboard-metric"><span>Total no filtro</span><strong>${money(total)}</strong><small class="muted">${open.length} conta(s)</small></div>${fLate.length?`<div class="dashboard-metric"><span>Atrasadas</span><strong>${money(sum(fLate))}</strong><small class="muted">${fLate.length} conta(s)</small></div>`:''}${(fRest.length&&fLate.length)?`<div class="dashboard-metric"><span>A vencer</span><strong>${money(sum(fRest))}</strong><small class="muted">${fRest.length} conta(s)</small></div>`:''}</div></div>`:'';
+  const emptyMsg=filtered?'Nenhuma conta em aberto para o filtro escolhido.':payablesFilter==='late'?'Nenhuma conta atrasada.':payablesFilter==='pending'?'Nenhuma conta pendente neste mês.':'Nenhuma conta atrasada ou pendente neste mês.';
+  $('tableWrap').innerHTML=`${filterBar}
+   <div class="filter-chips">${chip('all','Todas',late.length+pend.length)}${chip('pending','Pendentes do mês',pend.length)}${chip('late','Atrasadas',late.length)}</div>
+   ${resultHtml}
    <div class="dashboard-metrics" style="margin-bottom:14px"><div class="dashboard-metric"><span>Atrasadas</span><strong>${money(sum(late))}</strong></div><div class="dashboard-metric"><span>Pendentes do mês</span><strong>${money(sum(pend))}</strong></div><div class="dashboard-metric"><span>Total da lista</span><strong>${money(total)}</strong></div></div>
    ${open.length?`<div class="table-scroll"><table><thead><tr><th>Vencimento</th><th>Categoria</th><th>Subcategoria</th><th>Descrição</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${open.map(r=>`<tr><td>${dueOf(r)?dateBR(dueOf(r)):'Sem vencimento'}${isLate(r)?' <span class="late-badge">Atrasada</span>':''}</td><td>${esc(r.category||'—')}</td><td>${esc(r.subcategory||'—')}</td><td>${esc(r.description||'')}${r.recurrenceNumber?` <span class="muted small">(${r.recurrenceNumber}/${r.recurrenceTotal})</span>`:''}</td><td>${money(r.value)}</td><td><button class="action" data-pay="${r.id}">Confirmar pagamento</button> <button class="action" data-edit="${r.id}">Editar</button> <button class="action" data-delete="${r.id}">Excluir</button></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">${emptyMsg}</div>`}
-   ${futureCount?`<p class="muted small">${futureCount} conta(s) com vencimento em meses futuros não aparecem nesta lista.</p>`:''}`;
+   ${(futureCount&&!rangeOn)?`<p class="muted small">${futureCount} conta(s) com vencimento em meses futuros não aparecem nesta lista. Use o filtro de vencimento para vê-las.</p>`:''}`;
   $('tableWrap').querySelectorAll('[data-pfilter]').forEach(b=>b.onclick=()=>{payablesFilter=b.dataset.pfilter;renderPayablesTable();});
+  const fixRange=()=>{if(payFrom&&payTo&&payFrom>payTo){const t=payFrom;payFrom=payTo;payTo=t;}};
+  $('payFrom').onchange=e=>{payFrom=e.target.value||'';fixRange();renderPayablesTable();};
+  $('payTo').onchange=e=>{payTo=e.target.value||'';fixRange();renderPayablesTable();};
+  $('payCat').onchange=e=>{payCat=e.target.value||'all';renderPayablesTable();};
+  $('payClear').onclick=()=>{payFrom='';payTo='';payCat='all';payablesFilter='all';$('searchInput').value='';renderPayablesTable();};
   $('tableWrap').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>renderForm(open.find(r=>r.id===b.dataset.edit)));
-  $('tableWrap').querySelectorAll('[data-pay]').forEach(b=>b.onclick=async()=>{
+  $('tableWrap').querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{
    const r=open.find(x=>x.id===b.dataset.pay);if(!r)return;
-   if(!confirm(`Confirmar o pagamento de ${money(r.value)} referente a “${r.description}”?`))return;
-   const method=prompt('Informe a forma de pagamento: Pix, Dinheiro, Cartão, Transferência, Débito automático ou Outro.','Pix');
-   if(method===null)return;
-   const allowed=expensePaymentMethods.find(x=>x.toLocaleLowerCase('pt-BR')===method.trim().toLocaleLowerCase('pt-BR'));
-   if(!allowed){showToast('Forma de pagamento inválida.');return;}
-   try{
-    const paidDate=localISODate();
-    await save('expenses',{...r,paymentStatus:'Pago',payment:allowed,date:paidDate,paidAt:paidDate});
-    await closeDueNotificationsIfClear();
-    showToast('Pagamento confirmado e lançado em Despesas.');
-    await renderTable();await renderStats();
-   }catch(err){showToast('Erro ao confirmar pagamento: '+err.message);}
+   renderPayConfirmForm(r);
   });
   $('tableWrap').querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
    if(!confirm('Excluir esta conta a pagar?'))return;
@@ -2072,7 +2139,7 @@ renderSection=function(){
  $('addBtn').classList.toggle('hidden',special);
  $('searchInput').parentElement.classList.toggle('hidden',home||dashboard);
  $('addBtn').textContent=active==='clients'?'+ Novo cliente':active==='payables'?'+ Nova conta a pagar':active==='payments'?'+ Outra entrada':active==='credits'?'+ Nova recarga':active==='expenses'?'+ Nova despesa':'+ Novo '+(modules[active]?.singular||'registro');
- $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por descrição, cliente ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':active==='credits'?'Buscar cliente…':'Buscar neste cadastro…';
+ $('searchInput').value='';$('searchInput').placeholder=active==='clients'?'Buscar por nome ou placa…':active==='payments'?'Buscar por nome, descrição, categoria ou forma…':active==='retorno'?'Buscar por nome, telefone ou placa…':active==='services'?'Buscar por placa, cliente ou serviço…':active==='credits'?'Buscar cliente…':active==='payables'?'Buscar por descrição, categoria ou fornecedor…':'Buscar neste cadastro…';
  if(home)renderHomePanel();else if(dashboard)renderDashboards();else if(active==='pending')renderPendingPaymentsTable();else renderTable();
 };
 
@@ -3069,7 +3136,7 @@ async function renderExpensesPanel(){
   const sum=a=>a.reduce((n,e)=>n+Number(e.value||0),0);
   const total=sum(monthPaid),prevTotal=sum(prevPaid);
   const monthLabel=new Date(Number(key.slice(0,4)),Number(key.slice(5,7))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
-  const itemRow=e=>`<div class="exp-item"><div><b>${esc(e.description||'Despesa')}</b><br><span class="muted small">${dateBR(dateOf(e))}${e.supplier?' · '+esc(e.supplier):''}${e.subcategory?' · '+esc(e.subcategory):''}${e.payment?' · '+esc(e.payment):''}</span></div><div class="exp-item-right"><b>${money(e.value)}</b><span><button type="button" class="action" data-exp-edit="${esc(e.id)}">Editar</button> <button type="button" class="action" data-exp-del="${esc(e.id)}">Excluir</button></span></div></div>`;
+  const itemRow=e=>`<div class="exp-item"><div><b>${esc(e.description||'Despesa')}</b><br><span class="muted small">${dateBR(dateOf(e))}${e.supplier?' · '+esc(e.supplier):''}${e.subcategory?' · '+esc(e.subcategory):''}${e.payment?' · '+esc(e.payment):''}${Number(e.interest||0)>=0.01?' · juros/multa '+money(e.interest):Number(e.interest||0)<=-0.01?' · desconto '+money(-Number(e.interest)):''}</span></div><div class="exp-item-right"><b>${money(e.value)}</b><span><button type="button" class="action" data-exp-edit="${esc(e.id)}">Editar</button> <button type="button" class="action" data-exp-del="${esc(e.id)}">Excluir</button></span></div></div>`;
   let body;
   if(q){
    const found=all$.filter(e=>normalizeText([e.description,e.supplier,e.category,e.subcategory].join(' ')).includes(q)).sort((a,b)=>String(dateOf(b)).localeCompare(String(dateOf(a))));
@@ -3577,19 +3644,23 @@ async function setupExcelImport(){
 
 /* ===== FINANCEIRO: resumo de entradas e saídas + outras entradas (v19) ===== */
 let financeMonth='', financeKind='all', financeCfgOpen=false;
+let financeFrom='', financeTo='', financeCat='all';
 const otherIncomeMethods=['Pix','Dinheiro','Cartão','Cartão de débito','Cartão de crédito','Transferência','Outro'];
 async function renderFinancePanel(){
  try{
   const [payments,expenses,servicesAll]=await Promise.all([all('payments'),all('expenses'),all('services')]);
   const key=financeMonth||localISODate().slice(0,7);
   const q=normalizeText($('searchInput').value);
-  const inMonth=d=>String(d||'').slice(0,7)===key;
+  const rangeOn=!!(financeFrom||financeTo);
+  // Período: o mês escolhido ou, se De/Até estiver preenchido, o intervalo livre.
+  const inMonth=d=>{const s=String(d||'').slice(0,10);if(rangeOn)return !!s&&(!financeFrom||s>=financeFrom)&&(!financeTo||s<=financeTo);return s.slice(0,7)===key;};
   const isPaid=e=>e.paymentStatus==='Pago';
   const isOpen=e=>e.paymentStatus==='Em aberto'||e.paymentStatus==='Pendente';
   // Entradas: recebimentos de serviços (vinculados) e outras entradas (lançadas aqui).
   const ins=payments.filter(p=>p.status!=='Estornado'&&inMonth(p.date)).map(p=>({id:p.id,date:p.date,dir:'in',other:!p.serviceId&&p.kind!=='credito',type:p.serviceId?'Serviço':(p.kind==='credito'?'Recarga de crédito':'Outra entrada'),status:p.status||'Pendente',description:p.description||'Recebimento',person:p.client||'',method:p.method||'',value:Number(p.value||0),fee:feeOf(p),raw:p}));
   // Saídas: despesas pagas no mês (pela data do pagamento) e contas em aberto que vencem no mês.
-  const outs=expenses.filter(e=>isPaid(e)?inMonth(e.date||e.paidAt):(isOpen(e)&&inMonth(e.dueDate))).map(e=>({id:e.id,date:isPaid(e)?(e.date||e.paidAt):e.dueDate,dir:'out',other:false,type:'Saída',status:isPaid(e)?'Pago':'Em aberto',description:e.description||'',person:e.supplier||e.category||'',method:e.payment||'',value:Number(e.value||0)}));
+  const outs=expenses.filter(e=>isPaid(e)?inMonth(e.date||e.paidAt):(isOpen(e)&&inMonth(e.dueDate))).map(e=>({id:e.id,date:isPaid(e)?(e.date||e.paidAt):e.dueDate,dir:'out',other:false,type:'Saída',cat:canonicalExpenseCategory(e.category),sub:e.subcategory||'',interest:Number(e.interest||0),status:isPaid(e)?'Pago':'Em aberto',description:e.description||'',person:[e.supplier,e.subcategory].filter(Boolean).join(' · '),method:e.payment||'',value:Number(e.value||0)}));
+  ins.forEach(x=>{x.cat=x.type;});
   const sum=a=>a.reduce((n,x)=>n+x.value,0);
   const inPaid=ins.filter(x=>x.status==='Pago'), outPaid=outs.filter(x=>x.status==='Pago');
   const received=sum(inPaid), receivedOther=sum(inPaid.filter(x=>x.other)), receivedCredit=sum(inPaid.filter(x=>x.raw&&x.raw.kind==='credito')), receivedServices=received-receivedOther-receivedCredit;
@@ -3601,21 +3672,57 @@ async function renderFinancePanel(){
   if(financeKind==='in')rows=rows.filter(x=>x.dir==='in');
   else if(financeKind==='out')rows=rows.filter(x=>x.dir==='out');
   else if(financeKind==='other')rows=rows.filter(x=>x.other);
-  if(q)rows=rows.filter(x=>normalizeText([x.description,x.person,x.method,x.type,x.status].join(' ')).includes(q));
+  if(financeCat!=='all')rows=rows.filter(x=>x.cat===financeCat);
+  if(q)rows=rows.filter(x=>normalizeText([x.description,x.person,x.method,x.type,x.status,x.cat,x.sub].join(' ')).includes(q));
   rows.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const shown=rows.slice(0,300);
   const chip=(k,label)=>`<button type="button" class="filter-chip ${financeKind===k?'active':''}" data-fkind="${k}">${label}</button>`;
   const monthLabel=new Date(Number(key.slice(0,4)),Number(key.slice(5,7))-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const periodText=rangeOn?(financeFrom&&financeTo?`de ${dateBR(financeFrom)} a ${dateBR(financeTo)}`:financeFrom?`a partir de ${dateBR(financeFrom)}`:`até ${dateBR(financeTo)}`):monthLabel;
+  const kindLabels={in:'Entradas',out:'Saídas',other:'Outras entradas'};
+  const rawQ=$('searchInput').value.trim();
+  const filtersActive=rangeOn||financeCat!=='all'||financeKind!=='all'||!!q;
+  const filterDesc=[kindLabels[financeKind]||'',financeCat!=='all'?financeCat:'',periodText,rawQ?`busca “${rawQ}”`:''].filter(Boolean).join(' · ');
+  // Soma de TODOS os lançamentos do filtro (não só dos 300 exibidos na lista).
+  const fOutPaid=rows.filter(x=>x.dir==='out'&&x.status==='Pago'), fOutOpen=rows.filter(x=>x.dir==='out'&&x.status!=='Pago');
+  const fInPaid=rows.filter(x=>x.dir==='in'&&x.status==='Pago'), fInOpen=rows.filter(x=>x.dir==='in'&&x.status!=='Pago');
+  const resMetric=(label,list)=>`<div class="dashboard-metric"><span>${label}</span><strong>${money(sum(list))}</strong><small class="muted">${list.length} lançamento(s)</small></div>`;
+  const resParts=[];
+  if(fOutPaid.length)resParts.push(resMetric('Saídas pagas',fOutPaid));
+  if(fOutOpen.length)resParts.push(resMetric('A pagar (em aberto)',fOutOpen));
+  if(fInPaid.length)resParts.push(resMetric('Entradas recebidas',fInPaid));
+  if(fInOpen.length)resParts.push(resMetric('A receber',fInOpen));
+  if(fInPaid.length&&fOutPaid.length)resParts.push(`<div class="dashboard-metric"><span>Saldo (entradas − saídas)</span><strong>${money(sum(fInPaid)-sum(fOutPaid))}</strong></div>`);
+  const resultHtml=filtersActive?`<div class="filter-result"><div class="filter-result-head"><strong>Resultado do filtro · ${rows.length} lançamento(s)</strong><span class="muted small">${esc(filterDesc)}</span></div>${resParts.length?`<div class="dashboard-metrics">${resParts.join('')}</div>`:'<p class="muted small">Nenhum lançamento para este filtro.</p>'}</div>`:'';
+  const outCatList=[...new Set([...expenseCategories,...expenses.map(e=>canonicalExpenseCategory(e.category))])];
+  const inCatList=['Serviço','Outra entrada','Recarga de crédito'];
+  const catOpt=c=>`<option value="${esc(c)}" ${financeCat===c?'selected':''}>${esc(c)}</option>`;
+  const filterBarHtml=`<div class="filter-bar"><div class="field"><label for="financeFrom">De</label><input type="date" id="financeFrom" value="${esc(financeFrom)}"></div><div class="field"><label for="financeTo">Até</label><input type="date" id="financeTo" value="${esc(financeTo)}"></div><div class="field"><label for="financeCat">Categoria</label><select id="financeCat"><option value="all">Todas as categorias</option><optgroup label="Saídas">${outCatList.map(catOpt).join('')}</optgroup><optgroup label="Entradas">${inCatList.map(catOpt).join('')}</optgroup></select></div><button type="button" class="secondary" id="financeClear">Limpar filtros</button></div>${rangeOn?'<p class="muted small" style="margin:-4px 0 10px">Período livre ativo: o mês escolhido acima é ignorado.</p>':''}`;
+  const chipsHtml=`<div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>`;
+  const subLine=r=>{const p=[r.dir==='out'?r.cat:'',r.person,r.method].filter(Boolean).map(esc);if(r.fee>0)p.push('taxa '+money(r.fee));if(r.interest>=0.01)p.push('juros/multa '+money(r.interest));else if(r.interest<=-0.01)p.push('desconto '+money(-r.interest));return p.length?`<br><small class="muted">${p.join(' · ')}</small>`:'';};
 const pctText=v=>String(Number(v||0)).replace('.',',');
   const settingsHtml=`<details class="return-editor" ${financeCfgOpen?'open':''}><summary>Taxas de cartão e meta do mês</summary><div class="form-grid" style="margin-top:10px"><div class="field"><label>Taxa Pix (%)</label><input id="feePix" inputmode="decimal" value="${pctText(appSettings.fees['Pix'])}"></div><div class="field"><label>Taxa cartão geral (%)</label><input id="feeCard" inputmode="decimal" value="${pctText(appSettings.fees['Cartão'])}"></div><div class="field"><label>Taxa débito (%)</label><input id="feeDebit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de débito'])}"></div><div class="field"><label>Taxa crédito (%)</label><input id="feeCredit" inputmode="decimal" value="${pctText(appSettings.fees['Cartão de crédito'])}"></div><div class="field"><label>Contabilizar taxas a partir de</label><input id="feesSince" type="date" value="${esc(appSettings.feesSince||localISODate())}"></div><div class="field"><label>Meta de faturamento do mês (R$)</label><input id="goalMonthly" inputmode="decimal" value="${appSettings.goal.monthly?decimalText(appSettings.goal.monthly):''}" placeholder="0,00"></div></div><div class="return-actions"><button type="button" class="secondary" id="saveSettingsBtn">Salvar</button></div><p class="muted small">As taxas valem para novos recebimentos (os já registrados mantêm a taxa da época). As configurações ficam salvas na sua conta e valem em todos os aparelhos.</p></details>`;
   $('tableWrap').innerHTML=`<div class="finance-toolbar"><label for="financeMonthInput">Mês</label><input type="month" id="financeMonthInput" value="${key}"><button type="button" class="secondary" id="financeThisMonth">Mês atual</button></div>
+   ${filterBarHtml}
+   ${chipsHtml}
+   ${resultHtml}
    ${settingsHtml}
-   <div class="dashboard-metrics compact" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)} · Recargas ${money(receivedCredit)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado do mês (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence no mês)</span><strong>${money(toPay)}</strong></div></div>
-   <div class="filter-chips">${chip('all','Todas')}${chip('in','Entradas')}${chip('out','Saídas')}${chip('other','Outras entradas')}</div>
-   <p class="muted small">Movimento de ${esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
-   ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${r.person?`<br><small class="muted">${esc(r.person)}${r.method?' · '+esc(r.method):''}${r.fee>0?' · taxa '+money(r.fee):''}</small>`:''}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:'<div class="empty">Nenhum lançamento neste mês para o filtro escolhido.</div>'}`;
-  $('financeMonthInput').onchange=e=>{financeMonth=e.target.value||'';renderFinancePanel();};
-  $('financeThisMonth').onclick=()=>{financeMonth='';renderFinancePanel();};
+   <div class="dashboard-metrics compact" style="margin-bottom:14px"><div class="dashboard-metric"><span>Entradas recebidas</span><strong>${money(received)}</strong><small class="muted">Serviços ${money(receivedServices)} · Outras ${money(receivedOther)} · Recargas ${money(receivedCredit)}</small></div><div class="dashboard-metric"><span>Saídas pagas</span><strong>${money(spent)}</strong></div><div class="dashboard-metric"><span>Taxas de cartão</span><strong>${money(feeTotal)}</strong><small class="muted">Entradas líquidas ${money(received-feeTotal)}</small></div><div class="dashboard-metric"><span>Resultado ${rangeOn?'do período':'do mês'} (após taxas)</span><strong class="${received-feeTotal-spent<0?'amount-out':'amount-in'}">${money(received-feeTotal-spent)}</strong></div><div class="dashboard-metric"><span>Extras vendidos</span><strong>${money(extrasTotalMonth)}</strong><small class="muted">${extrasMonth.length} serviço(s) com extra</small></div><div class="dashboard-metric"><span>A receber</span><strong>${money(toReceive)}</strong></div><div class="dashboard-metric"><span>A pagar (vence ${rangeOn?'no período':'no mês'})</span><strong>${money(toPay)}</strong></div></div>
+   <p class="muted small">Movimento ${rangeOn?esc(periodText):'de '+esc(monthLabel)}. Entradas de serviços são lançadas em Serviços e saídas em Despesas / Contas a pagar; aqui você acompanha tudo e lança outras entradas.</p>
+   ${shown.length?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${shown.map(r=>`<tr><td>${dateBR(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.description)}${subLine(r)}</td><td>${esc(r.status)}</td><td class="${r.dir==='in'?'amount-in':'amount-out'}">${r.dir==='in'?'+':'−'} ${money(r.value)}</td><td>${r.dir==='in'&&r.other?`<button class="action" data-fedit="${esc(r.id)}">Editar</button> <button class="action" data-fdel="${esc(r.id)}">Excluir</button>`:'<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table></div>${rows.length>shown.length?`<p class="muted small">Mostrando ${shown.length} de ${rows.length} lançamentos. Use a busca para refinar.</p>`:''}`:`<div class="empty">Nenhum lançamento ${rangeOn?'neste período':'neste mês'} para o filtro escolhido.</div>`}`;
+  $('financeMonthInput').onchange=e=>{financeMonth=e.target.value||'';financeFrom='';financeTo='';renderFinancePanel();};
+  $('financeThisMonth').onclick=()=>{financeMonth='';financeFrom='';financeTo='';renderFinancePanel();};
+  const fixFinRange=()=>{if(financeFrom&&financeTo&&financeFrom>financeTo){const t=financeFrom;financeFrom=financeTo;financeTo=t;}};
+  $('financeFrom').onchange=e=>{financeFrom=e.target.value||'';fixFinRange();renderFinancePanel();};
+  $('financeTo').onchange=e=>{financeTo=e.target.value||'';fixFinRange();renderFinancePanel();};
+  $('financeCat').onchange=e=>{
+   financeCat=e.target.value||'all';
+   // Se a categoria escolhida não combina com o tipo marcado (ex.: categoria de saída com "Entradas"), volta para "Todas".
+   const isOut=outCatList.includes(financeCat), isIn=inCatList.includes(financeCat);
+   if((isOut&&(financeKind==='in'||financeKind==='other'))||(isIn&&financeKind==='out'))financeKind='all';
+   renderFinancePanel();
+  };
+  $('financeClear').onclick=()=>{financeFrom='';financeTo='';financeCat='all';financeKind='all';$('searchInput').value='';renderFinancePanel();};
   $('saveSettingsBtn').onclick=async()=>{
    try{
     const pct=id=>{const n=decimalValue($(id).value);if(!Number.isFinite(n)||n<0||n>30)throw new Error('Taxas devem estar entre 0% e 30%.');return n;};

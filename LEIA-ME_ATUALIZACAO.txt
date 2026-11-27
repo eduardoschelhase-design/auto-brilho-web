@@ -1,10 +1,12 @@
-AUTO BRILHO WEB - VERSAO 35
+AUTO BRILHO WEB - VERSAO 36
 
 ALTERACOES:
-- app.js: ao abrir um novo servico e localizar a placa, aparece o "Ultimo servico" com a data e quantos dias se passaram (hoje / ha 1 dia / ha X dias), alem do tipo de servico e do total de servicos no historico. Se a placa nao tiver servico anterior, mostra "Primeiro servico deste veiculo". Servicos cancelados e datas futuras nao entram na conta; ao editar um servico, ele proprio e ignorado. O valor do ultimo servico fica oculto para perfil de funcionario.
-- style.css: estilo do aviso (tema escuro).
-- index.html: versao v35 no cabecalho.
-- sw.js: cache atualizado para v35.
+- app.js / Financeiro: novo filtro com RESULTADO (soma). Alem do mes, agora e possivel escolher um periodo livre (De / Ate) e uma categoria (todas as categorias de saida - Produtos, Funcionarios, Pro-labore, Despesa mensal, Diversos, Cartao / emprestimo - e os tipos de entrada). Junto com a busca por nome/descricao e os botoes Todas / Entradas / Saidas / Outras entradas, aparece o quadro "Resultado do filtro" com: saidas pagas, a pagar em aberto, entradas recebidas, a receber e saldo, sempre somando TODOS os lancamentos do filtro. Botao "Limpar filtros". A busca agora tambem encontra pela categoria e subcategoria. Os botoes Todas / Entradas / Saidas / Outras entradas passaram para junto dos filtros.
+- app.js / Contas a pagar: mesmo filtro (vencimento De / Ate, categoria e busca) com o quadro "Resultado do filtro" (total, atrasadas e a vencer). Ao escolher um periodo, as contas de meses futuros tambem aparecem.
+- app.js / Contas a pagar: "Confirmar pagamento" agora abre uma tela com o VALOR PAGO editavel (ja vem preenchido com o valor da conta), a data do pagamento (hoje, pode alterar) e a forma de pagamento. Mostra na hora o acrescimo (juros/multa) ou desconto em relacao ao valor original. O valor pago e o que entra em Despesas, Financeiro e Dashboards; o valor original e a diferenca ficam guardados e aparecem como "juros/multa" nas listas.
+- app.js: Despesas mostra "juros/multa" nos itens pagos com valor diferente do original.
+- style.css: estilo dos filtros e do quadro de resultado.
+- index.html / sw.js: versao v36 e cache atualizado.
 
 ARQUIVOS PRESERVADOS: manifest.json, icon-192.png, icon-512.png.
 
